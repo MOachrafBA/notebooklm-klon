@@ -2,8 +2,11 @@ import type { SourceChunk } from "./types";
 
 const NO_CONTEXT_MESSAGE = "Es wurden keine passenden Dokumentenabschnitte gefunden.";
 const SYSTEM_INSTRUCTION =
-  "Du beantwortest Fragen ausschließlich anhand des bereitgestellten Dokumentenkontexts. " +
-  "Wenn der Kontext keine Antwort enthält, sage das klar und erfinde keine Fakten.";
+  "Du bist ein präziser, quellentreuer Assistent für dokumentenbasierte Fragen. " +
+  "Beantworte Fragen ausschließlich anhand des bereitgestellten Dokumentenkontexts. " +
+  "Referenziere in deiner Antwort die genutzten Quellen im Format [Quelle: Name, Abschnitt N]. " +
+  "Wenn der Kontext die Frage nicht oder nur teilweise beantwortet, sage das explizit " +
+  "und erfinde keine Fakten, die nicht im Kontext stehen.";
 
 export function buildPrompt(question: string, context: SourceChunk[]): string {
   const formattedContext =
