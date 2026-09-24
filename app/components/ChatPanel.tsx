@@ -35,10 +35,16 @@ export function ChatPanel({ sources }: ChatPanelProps) {
       const response = await fetch(CHAT_ENDPOINT, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question: trimmedQuestion, documents: sources }),
+        body: JSON.stringify({
+          question: trimmedQuestion,
+          documentIds: sources.map((source) => source.id),
+        }),
       });
       const payload: unknown = await response.json();
-      if (!response.ok || !isChatResponse(payload)) {
+      if (!response.ok) {
+        throw new Error(getApiError(payload));
+      }
+      if (!isChatResponse(payload)) {
         throw new Error(REQUEST_ERROR_MESSAGE);
       }
       setMessages((current) => [...current, createMessage("assistant", payload.answer)]);
@@ -110,4 +116,15 @@ function isChatResponse(value: unknown): value is ChatResponse {
   }
   const response = value as { answer?: unknown };
   return typeof response.answer === "string" && response.answer.length > 0;
+}
+
+function getApiError(value: unknown): string {
+  if (typeof value === "object" && value !== null) {
+    const response = value as { error?: unknown };
+    if (typeof response.error === "string" && response.error.length > 0) {
+      return response.error;
+    }
+  }
+
+  return REQUEST_ERROR_MESSAGE;
 }
