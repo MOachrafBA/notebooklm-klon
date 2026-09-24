@@ -48,7 +48,7 @@ app/api/chat/route.ts        ← Integration: validiert, orchestriert, formt Ant
 lib/rag/chunk.ts             ← Operation: Dokument in Abschnitte teilen
 lib/rag/retrieve.ts          ← Operation: relevante Abschnitte zur Frage finden
 lib/rag/prompt.ts            ← Operation: Prompt aus Frage + Kontext bauen
-lib/llm/client.ts            ← Operation: LLM-Aufruf (OpenAI)
+lib/llm/client.ts            ← Operation: LLM-Aufruf (Google Gemini)
 lib/rag/types.ts             ← gemeinsame Typen (DocumentSource, SourceChunk, ChatMessage, ...)
 
 app/page.tsx                 ← Integration: hält State, verbindet Sidebar und ChatPanel
@@ -64,7 +64,7 @@ damit einzeln unit-testbar.
 
 ```bash
 npm install
-cp .env.example .env.local   # OPENAI_API_KEY eintragen
+cp .env.example .env.local   # GEMINI_API_KEY eintragen
 npm run dev
 ```
 
@@ -82,6 +82,18 @@ App läuft danach unter [http://localhost:3000](http://localhost:3000).
 - [`clean_code.md`](./clean_code.md) – verbindliche Clean-Code-/Refactoring-Regeln für dieses Projekt
 - [`PROMPT.md`](./PROMPT.md) – chronologische Dokumentation aller verwendeten KI-Master-Prompts inkl. Begründung von Anpassungen
 - [`AGENTS.md`](./AGENTS.md) – Agenten-Konfiguration (Claude Code, GitHub Copilot)
+
+### Deployment auf Vercel
+
+In den Vercel-Projekteinstellungen unter **Settings → Environment Variables** setzen:
+
+```text
+GEMINI_API_KEY=<dein-neuer-gemini-api-key>
+GEMINI_MODEL=gemini-3.6-flash
+```
+
+Den API-Key nicht in den Quellcode, in `README.md` oder in `.env` committen. Für lokale
+Entwicklung `.env.local` verwenden; diese Dateien werden durch `.gitignore` ausgeschlossen.
 
 ## Offene Punkte / nächste Schritte
 
