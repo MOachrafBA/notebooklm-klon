@@ -8,7 +8,15 @@ import type { DocumentSource } from "@/lib/rag/types";
 export default function Home() {
   const [sources, setSources] = useState<DocumentSource[]>([]);
 
-  function addSource(source: DocumentSource) {
+  async function addSource(source: DocumentSource) {
+    const response = await fetch("/api/documents/ingest", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(source),
+    });
+    if (!response.ok) {
+      throw new Error("Die Quelle konnte nicht gespeichert werden.");
+    }
     setSources((current) => [...current, source]);
   }
 

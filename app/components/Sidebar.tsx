@@ -8,7 +8,7 @@ const MAX_UPLOAD_SIZE_BYTES = 5_000_000;
 
 interface SidebarProps {
   sources: DocumentSource[];
-  onSourceAdded: (source: DocumentSource) => void;
+  onSourceAdded: (source: DocumentSource) => Promise<void>;
   onSourceRemoved: (sourceId: string) => void;
 }
 
@@ -37,12 +37,13 @@ export function Sidebar({ sources, onSourceAdded, onSourceRemoved }: SidebarProp
         setUploadError("Die Datei enthält keinen lesbaren Text.");
         return;
       }
-      onSourceAdded({
+      const source: DocumentSource = {
         id: crypto.randomUUID(),
         name: file.name,
         type: getDocumentType(file.name),
         content,
-      });
+      };
+      await onSourceAdded(source);
       setUploadError(null);
     } catch (error) {
       console.error("File upload failed:", error);
