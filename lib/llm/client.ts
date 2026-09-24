@@ -1,57 +1,63 @@
-const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
-const DEFAULT_MODEL = "gpt-4o-mini";
+import { SYSTEM_INSTRUCTION } from "@/lib/rag/prompt";
+
+const GEMINI_API_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models";
+const DEFAULT_MODEL = "gemini-3.6-flash";
 const REQUEST_TIMEOUT_MS = 30_000;
+const GENERATION_TEMPERATURE = 0.2;
 
-interface OpenAiMessage {
-  role: "system" | "user";
-  content: string;
+interface GeminiPart {
+  text?: string;
 }
 
-interface OpenAiResponse {
-  choices?: Array<{
-    message?: {
-      content?: string;
-    };
-  }>;
+interface GeminiCandidate {
+  content?: {
+    parts?: GeminiPart[];
+  };
 }
 
-function isOpenAiResponse(value: unknown): value is OpenAiResponse {
+interface GeminiResponse {
+  candidates?: GeminiCandidate[];
+}
+
+function isGeminiResponse(value: unknown): value is GeminiResponse {
   if (typeof value !== "object" || value === null) {
     return false;
   }
 
-  const response = value as { choices?: unknown };
-  return Array.isArray(response.choices);
+  const response = value as { candidates?: unknown };
+  return response.candidates === undefined || Array.isArray(response.candidates);
 }
 
 export async function callLlm(prompt: string): Promise<string> {
-  const apiKey = process.env.OPENAI_API_KEY;
+  const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
-    throw new Error("OPENAI_API_KEY ist nicht konfiguriert.");
+    throw new Error("GEMINI_API_KEY ist nicht konfiguriert.");
   }
 
+  const model = process.env.GEMINI_MODEL ?? DEFAULT_MODEL;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
-  const messages: OpenAiMessage[] = [
-    {
-      role: "system",
-      content: "Du bist ein präziser Assistent für dokumentenbasierte Fragen.",
-    },
-    { role: "user", content: prompt },
-  ];
-
   try {
-    const response = await fetch(OPENAI_API_URL, {
+    const response = await fetch(`${GEMINI_API_BASE_URL}/${model}:generateContent`, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${apiKey}`,
+        "x-goog-api-key": apiKey,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: process.env.OPENAI_MODEL ?? DEFAULT_MODEL,
-        messages,
-        temperature: 0.2,
+        systemInstruction: {
+          parts: [{ text: SYSTEM_INSTRUCTION }],
+        },
+        contents: [
+          {
+            role: "user",
+            parts: [{ text: prompt }],
+          },
+        ],
+        generationConfig: {
+          temperature: GENERATION_TEMPERATURE,
+        },
       }),
       signal: controller.signal,
     });
@@ -62,11 +68,11 @@ export async function callLlm(prompt: string): Promise<string> {
     }
 
     const payload: unknown = await response.json();
-    if (!isOpenAiResponse(payload)) {
+    if (!isGeminiResponse(payload)) {
       throw new Error("Die LLM-Antwort hat ein ungültiges Format.");
     }
 
-    const answer = payload.choices?.[0]?.message?.content?.trim();
+    const answer = payload.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
     if (!answer) {
       throw new Error("Die LLM-Antwort enthält keinen Text.");
     }
