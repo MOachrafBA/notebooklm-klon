@@ -27,7 +27,7 @@ export interface ChatMessage {
 
 export interface ChatRequest {
   question: string;
-  documents: DocumentSource[];
+  documentIds: string[];
 }
 
 export interface ChatResponse {
