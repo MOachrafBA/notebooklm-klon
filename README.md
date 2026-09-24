@@ -1,36 +1,97 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Sourcewise – ein NotebookLM-Klon
 
-## Getting Started
+Ein dokumentenbasiertes Chat-Tool im Stil von [Google NotebookLM](https://notebooklm.google.com/):
+Quellen (PDF/Text) hochladen, Fragen stellen, Antworten ausschließlich auf Basis der hochgeladenen
+Dokumente erhalten – inklusive Quellenangabe.
 
-First, run the development server:
+Entstanden als Testaufgabe unter 7 Tagen Zeitdruck, mit Fokus auf sauberer Architektur
+(Clean Code / IOSP) statt Feature-Vollständigkeit.
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+**Live-Demo:** _(Vercel-Link hier ergänzen, sobald deployed)_
+
+---
+
+## Was ist umgesetzt – und was bewusst nicht
+
+NotebookLM ist 2026 ein umfangreiches Multimedia-Tool (Audio/Video-Overviews, Mind Maps, Slide
+Decks, Studio-Panel). Der Kern von NotebookLM ist aber nicht die Multimedia-Ausgabe, sondern das
+**Grounding-Versprechen**: Antworten ausschließlich anhand der bereitgestellten Quellen, keine
+erfundenen Fakten. Genau darauf liegt der Fokus dieses Klons.
+
+| NotebookLM-Feature | Im Klon umgesetzt | Begründung |
+|---|---|---|
+| Source-grounded Chat mit Zitaten | ✅ | Kernfunktion, Fokus der 7 Tage |
+| Mehrere Quellen hochladen, verwalten, entfernen | ✅ | Sidebar mit aktiver Quellenliste |
+| Text-/Markdown-Extraktion beim Upload | ✅ | Direktes Auslesen im Browser (`file.text()`) |
+| Echtes PDF-Text-Parsing (Binärformat) | ⚠️ teilweise | Aktuell wird der Rohinhalt gelesen, kein dediziertes PDF-Parsing (z. B. `pdf-parse`) – offener Punkt |
+| Retrieval über Embeddings/Vector-DB | ❌ | Stattdessen einfaches Keyword-Scoring über Chunks – bewusste KISS-Entscheidung, kein DB-Setup unter Zeitdruck |
+| Audio Overviews, Video Overviews, Mind Maps, Studio-Panel | ❌ bewusst nicht umgesetzt | Eigenständige Multimedia-Pipelines (TTS/Video-Rendering), außerhalb des Zeitrahmens und nicht Kern der Aufgabe |
+| Quellen einzeln ein-/ausschalten für den Kontext | ❌ (noch offen) | Aktuell fließen immer alle hochgeladenen Quellen in die Suche ein |
+
+## Tech-Stack
+
+- **Framework:** Next.js 16 (App Router, TypeScript)
+- **Styling:** Tailwind CSS 4
+- **LLM:** OpenAI API (`gpt-4o-mini` als Default, über `OPENAI_MODEL` konfigurierbar)
+- **RAG-Ansatz:** Context-Window-RAG ohne Vector-Datenbank – Dokumente werden serverseitig
+  gechunkt, relevante Abschnitte per Keyword-Scoring ausgewählt und direkt in den Prompt
+  eingebettet. Bewusst einfach gehalten für Stabilität unter Zeitdruck (siehe `clean_code.md`).
+- **Hosting:** Vercel
+
+## Architektur
+
+Der Code folgt den Clean-Code-Regeln aus [`clean_code.md`](./clean_code.md), insbesondere dem
+**IOSP-Prinzip** (Integration Operation Segregation Principle):
+
+```
+app/api/chat/route.ts        ← Integration: validiert, orchestriert, formt Antwort
+lib/rag/chunk.ts             ← Operation: Dokument in Abschnitte teilen
+lib/rag/retrieve.ts          ← Operation: relevante Abschnitte zur Frage finden
+lib/rag/prompt.ts            ← Operation: Prompt aus Frage + Kontext bauen
+lib/llm/client.ts            ← Operation: LLM-Aufruf (OpenAI)
+lib/rag/types.ts             ← gemeinsame Typen (DocumentSource, SourceChunk, ChatMessage, ...)
+
+app/page.tsx                 ← Integration: hält State, verbindet Sidebar und ChatPanel
+app/components/Sidebar.tsx   ← Upload-UI, Quellenliste
+app/components/ChatPanel.tsx ← Chat-UI, sendet Frage + Quellen an die API
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+`route.ts` enthält bewusst keine fachliche Logik – sie ruft nur die vier Operationen in der
+richtigen Reihenfolge auf. Jede Operation ist eine reine Funktion ohne Next.js-Abhängigkeit und
+damit einzeln unit-testbar.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Setup
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+npm install
+cp .env.example .env.local   # OPENAI_API_KEY eintragen
+npm run dev
+```
 
-## Learn More
+App läuft danach unter [http://localhost:3000](http://localhost:3000).
 
-To learn more about Next.js, take a look at the following resources:
+### Umgebungsvariablen
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+| Variable | Pflicht | Beschreibung |
+|---|---|---|
+| `OPENAI_API_KEY` | ja | API-Key für OpenAI |
+| `OPENAI_MODEL` | nein | Standard: `gpt-4o-mini` |
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Weiterführende Dokumentation
 
-## Deploy on Vercel
+- [`clean_code.md`](./clean_code.md) – verbindliche Clean-Code-/Refactoring-Regeln für dieses Projekt
+- [`PROMPT.md`](./PROMPT.md) – chronologische Dokumentation aller verwendeten KI-Master-Prompts inkl. Begründung von Anpassungen
+- [`AGENTS.md`](./AGENTS.md) – Agenten-Konfiguration (Claude Code, GitHub Copilot)
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Offene Punkte / nächste Schritte
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- Echtes PDF-Text-Parsing statt Rohtext-Auslesen
+- Unit-Tests für `lib/rag/*` (Operationen sind bereits isoliert testbar)
+- Einzelne Quellen für den Kontext ein-/ausschaltbar machen
+- Doppelte System-Instruction (`lib/llm/client.ts` vs. `lib/rag/prompt.ts`) zu einer Quelle zusammenführen
+
+## Entwicklungsprozess
+
+Dieses Projekt wurde iterativ mit KI-Unterstützung entwickelt (GitHub Copilot für Code-Generierung,
+Claude für Architekturentscheidungen und Code-Review). Der vollständige Master-Prompt-Verlauf ist
+in [`PROMPT.md`](./PROMPT.md) dokumentiert.
