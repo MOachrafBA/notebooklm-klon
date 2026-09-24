@@ -1,8 +1,8 @@
 import { SYSTEM_INSTRUCTION } from "@/lib/rag/prompt";
 
 const GEMINI_API_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models";
-const DEFAULT_MODEL = "gemini-3.6-flash";
-const REQUEST_TIMEOUT_MS = 30_000;
+const DEFAULT_MODEL = "gemini-flash-lite-latest";
+const REQUEST_TIMEOUT_MS = 60_000;
 const GENERATION_TEMPERATURE = 0.2;
 
 interface GeminiPart {
@@ -78,6 +78,11 @@ export async function callLlm(prompt: string): Promise<string> {
     }
 
     return answer;
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw new Error("Die Gemini-Antwort hat das Zeitlimit von 60 Sekunden überschritten.");
+    }
+    throw error;
   } finally {
     clearTimeout(timeout);
   }
