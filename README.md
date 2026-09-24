@@ -32,10 +32,11 @@ erfundenen Fakten. Genau darauf liegt der Fokus dieses Klons.
 
 - **Framework:** Next.js 16 (App Router, TypeScript)
 - **Styling:** Tailwind CSS 4
-- **LLM:** Google Gemini API (`gemini-3.6-flash` als Default, über `GEMINI_MODEL` konfigurierbar) – dasselbe Modell-Ökosystem, auf dem NotebookLM selbst läuft (Gemini 3)
-- **RAG-Ansatz:** Context-Window-RAG ohne Vector-Datenbank – Dokumente werden serverseitig
-  gechunkt, relevante Abschnitte per Keyword-Scoring ausgewählt und direkt in den Prompt
-  eingebettet. Bewusst einfach gehalten für Stabilität unter Zeitdruck (siehe `clean_code.md`).
+- **LLM:** Google Gemini API (`gemini-flash-lite-latest` als Default, über `GEMINI_MODEL`
+  konfigurierbar)
+- **RAG-Ansatz:** Dokumente werden serverseitig gechunkt, mit `gemini-embedding-2` vektorisiert
+  und in Supabase Vector (Postgres/pgvector) gespeichert. Fragen werden ebenfalls eingebettet;
+  relevante Abschnitte kommen über eine Supabase-RPC-Funktion in den Gemini-Prompt.
 - **Hosting:** Vercel
 
 ## Architektur
@@ -46,25 +47,27 @@ Der Code folgt den Clean-Code-Regeln aus [`clean_code.md`](./clean_code.md), ins
 ```
 app/api/chat/route.ts        ← Integration: validiert, orchestriert, formt Antwort
 lib/rag/chunk.ts             ← Operation: Dokument in Abschnitte teilen
-lib/rag/retrieve.ts          ← Operation: relevante Abschnitte zur Frage finden
+lib/rag/embeddings.ts        ← Operation: Gemini-Text in Vektoren umwandeln
+lib/rag/vectorStore.ts       ← Operation: Chunks in Supabase speichern/abrufen
 lib/rag/prompt.ts            ← Operation: Prompt aus Frage + Kontext bauen
-lib/llm/client.ts            ← Operation: LLM-Aufruf (OpenAI)
+lib/llm/client.ts            ← Operation: Gemini-Antwort erzeugen
 lib/rag/types.ts             ← gemeinsame Typen (DocumentSource, SourceChunk, ChatMessage, ...)
 
 app/page.tsx                 ← Integration: hält State, verbindet Sidebar und ChatPanel
 app/components/Sidebar.tsx   ← Upload-UI, Quellenliste
 app/components/ChatPanel.tsx ← Chat-UI, sendet Frage + Quellen an die API
+supabase/schema.sql          ← pgvector-Tabelle und Retrieval-RPC
 ```
 
-`route.ts` enthält bewusst keine fachliche Logik – sie ruft nur die vier Operationen in der
-richtigen Reihenfolge auf. Jede Operation ist eine reine Funktion ohne Next.js-Abhängigkeit und
-damit einzeln unit-testbar.
+`route.ts` enthält bewusst keine fachliche Logik – sie orchestriert Embedding, Supabase-Retrieval,
+Prompt-Bau und Gemini-Aufruf. Supabase-Aufrufe liegen in `lib/rag/vectorStore.ts`; die Routen
+enthalten keine direkten Datenbankdetails.
 
 ## Setup
 
 ```bash
 npm install
-cp .env.example .env.local   # OPENAI_API_KEY eintragen
+cp .env.example .env.local
 npm run dev
 ```
 
@@ -75,7 +78,15 @@ App läuft danach unter [http://localhost:3000](http://localhost:3000).
 | Variable | Pflicht | Beschreibung |
 |---|---|---|
 | `GEMINI_API_KEY` | ja | API-Key für die Google Gemini API |
-| `GEMINI_MODEL` | nein | Standard: `gemini-3.6-flash` |
+| `GEMINI_MODEL` | nein | Standard: `gemini-flash-lite-latest` |
+| `SUPABASE_URL` | ja | URL des Supabase-Projekts |
+| `SUPABASE_SERVICE_ROLE_KEY` | ja | Server-only Supabase-Key, niemals im Browser verwenden |
+
+Vor dem Start das SQL aus [`supabase/schema.sql`](./supabase/schema.sql) im Supabase SQL Editor
+ausführen. Die Embedding-Spalte muss dieselbe Dimension haben wie die von
+`gemini-embedding-2` gelieferten Vektoren. Für produktive Indexierung sollte nach einem
+Embedding-Test eine feste Dimension von `vector(3072)` verwendet werden. Der erfolgreiche
+Test mit `gemini-embedding-2` hat 3072 Werte geliefert.
 
 ## Weiterführende Dokumentation
 

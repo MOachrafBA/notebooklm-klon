@@ -127,7 +127,91 @@ in `prompt.ts`) wurde dabei zusammengeführt. `SYSTEM_INSTRUCTION` existiert jet
 
 ---
 
+## 2026-09-24 – Migration von Keyword-RAG zu Supabase Vector RAG (Copilot)
+
+**Ziel:** Die bisherige, flüchtige Keyword-Suche durch persistentes semantisches Retrieval mit
+Supabase Vector (`pgvector`) ersetzen. Die Lösung muss auf Vercel funktionieren und weiterhin den
+IOSP-/SRP-Regeln aus `clean_code.md` entsprechen.
+
+**Prompt:**
+
+```text
+Du bist ein erfahrener Fullstack-Entwickler für Next.js App Router, TypeScript, Vercel,
+Google Gemini API und Supabase Vector (Postgres/pgvector).
+
+Migriere die bestehende NotebookLM-Klon-Anwendung von Keyword-RAG zu persistentem Vector-RAG.
+Nutze das Gemini-Embedding-Modell `gemini-embedding-2` über die REST-API
+`models.embedContent`. Verwende für Dokument-Chunks das Format
+`title: {documentName} | text: {chunkText}` und für Benutzerfragen das Format
+`task: question answering | query: {question}`.
+
+Halte dich strikt an `clean_code.md` und insbesondere an IOSP:
+
+- `app/api/chat/route.ts` ist ausschließlich eine Integration. Sie validiert den Request,
+  orchestriert Embedding, Supabase-Retrieval, Prompt-Bau und LLM-Aufruf und formt die Response.
+- `lib/rag/embeddings.ts` ist eine isolierte Operation für Gemini-Embeddings. Sie darf keine
+  Next.js- oder Supabase-Imports enthalten.
+- `lib/rag/vectorStore.ts` kapselt alle Supabase-Aufrufe für Speichern und Retrieval. Der
+  Service-Role-Key darf ausschließlich serverseitig über Environment-Variablen verwendet werden.
+- `lib/rag/chunk.ts` und `lib/rag/prompt.ts` bleiben fachlich isolierte Operationen.
+- Keine `any`-Typen, keine direkten Datenbankdetails in API-Routen, keine stillen Fehler und
+  keine unnötigen Adapter-Abstraktionen.
+
+Implementiere die vertikale Strecke:
+
+1. `POST /api/documents/ingest` validiert eine Dokumentquelle, chunked sie, erzeugt Embeddings
+   und speichert Chunks plus Vektoren in Supabase.
+2. `POST /api/chat` akzeptiert nur `question` und `documentIds`, embeddet die Frage, ruft passende
+   Chunks über eine Supabase-RPC-Funktion ab, baut den Grounding-Prompt und ruft Gemini auf.
+3. Passe UI und Types so an, dass beim Chat keine kompletten Dokumentinhalte mehr übertragen
+   werden, sondern nur noch Quellen-IDs.
+4. Ergänze `supabase/schema.sql` mit pgvector-Tabelle, Retrieval-RPC und aktiviertem Row Level
+   Security. Verwende keine öffentlichen Policies, solange ausschließlich serverseitig über den
+   Service-Role-Key zugegriffen wird; dokumentiere diese Sicherheitsgrenze.
+5. Ergänze `.env.example` und README um die benötigten Gemini-/Supabase-Variablen sowie die
+   notwendige Ausführung des SQL-Schemas.
+
+Wichtig:
+
+- Rate die Embedding-Dimension nicht. Dokumentiere, dass die Supabase-Spalte nach einem echten
+  Gemini-Test auf `vector(N)` festgelegt werden muss.
+- Verwende Timeout, API-Key-Prüfung, Response-Validierung und explizite Fehlerbehandlung.
+- Entferne das alte Keyword-Retrieval nur dann, wenn die Vector-Retrieval-Strecke vollständig
+  verdrahtet ist.
+- Prüfe am Ende `npm run lint`, `npm run build` und `git diff --check`.
+- Zeige abschließend die geänderte Architektur, die benötigten Environment-Variablen und alle
+  offenen Infrastruktur-Schritte für Supabase und Vercel.
+```
+
+**Umgesetzte Änderungen:**
+
+- `lib/rag/embeddings.ts` hinzugefügt: Gemini-Embedding-Requests mit dokumenten- und
+  fragenbezogenen Retrieval-Formaten, Timeout und Response-Validierung.
+- `lib/rag/vectorStore.ts` hinzugefügt: serverseitiger Supabase-Client, Upsert von Chunks und
+  RPC-basiertes Similarity Retrieval.
+- `app/api/documents/ingest/route.ts` hinzugefügt: Dokument-Ingestion als eigene Integration.
+- `app/api/chat/route.ts` auf `documentIds` und semantisches Retrieval umgestellt.
+- `app/page.tsx` und `app/components/Sidebar.tsx` auf asynchrones Ingestion-Verhalten umgestellt.
+- `app/components/ChatPanel.tsx` sendet nur noch Fragen und Quellen-IDs.
+- `lib/rag/retrieve.ts` entfernt, da Keyword-Retrieval durch Supabase Vector ersetzt wurde.
+- `supabase/schema.sql` ergänzt um Tabelle, Retrieval-RPC und aktivierte RLS.
+- `@supabase/supabase-js` als Server-Abhängigkeit ergänzt.
+- README und `.env.example` um Supabase-Konfiguration erweitert.
+
+**Sicherheitsentscheidung:** RLS ist auf `document_chunks` aktiviert. Es werden bewusst keine
+öffentlichen Policies erstellt, weil der aktuelle Zugriff ausschließlich serverseitig über
+`SUPABASE_SERVICE_ROLE_KEY` erfolgt. Der Service-Role-Key darf niemals in Client-Code oder
+`NEXT_PUBLIC_*`-Variablen gelangen. Sobald ein direkter Benutzerzugriff aus dem Browser oder
+Multi-User-Unterstützung hinzukommt, müssen identitätsgebundene RLS-Policies ergänzt werden.
+
+**Validierung:** `npm run lint`, `npm run build` und `git diff --check` erfolgreich.
+
+---
+
 ## Nächste geplante Prompts
 
 - PDF-Text-Extraktion (echtes Parsing statt Rohtext-Lesen)
-- Unit-Tests für `lib/rag/chunk.ts`, `retrieve.ts`, `prompt.ts`
+- Unit-Tests für `lib/rag/chunk.ts`, `embeddings.ts`, `vectorStore.ts` und `prompt.ts`
+- Die bestätigte Embedding-Dimension `3072` im Supabase-Schema verwenden und bei Änderungen am
+  Embedding-Modell erneut verifizieren
+- Identitätsgebundene Supabase-RLS-Policies für Multi-User-Zugriff ergänzen
