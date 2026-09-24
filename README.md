@@ -32,7 +32,7 @@ erfundenen Fakten. Genau darauf liegt der Fokus dieses Klons.
 
 - **Framework:** Next.js 16 (App Router, TypeScript)
 - **Styling:** Tailwind CSS 4
-- **LLM:** OpenAI API (`gpt-4o-mini` als Default, über `OPENAI_MODEL` konfigurierbar)
+- **LLM:** Google Gemini API (`gemini-3.6-flash` als Default, über `GEMINI_MODEL` konfigurierbar) – dasselbe Modell-Ökosystem, auf dem NotebookLM selbst läuft (Gemini 3)
 - **RAG-Ansatz:** Context-Window-RAG ohne Vector-Datenbank – Dokumente werden serverseitig
   gechunkt, relevante Abschnitte per Keyword-Scoring ausgewählt und direkt in den Prompt
   eingebettet. Bewusst einfach gehalten für Stabilität unter Zeitdruck (siehe `clean_code.md`).
@@ -74,8 +74,8 @@ App läuft danach unter [http://localhost:3000](http://localhost:3000).
 
 | Variable | Pflicht | Beschreibung |
 |---|---|---|
-| `OPENAI_API_KEY` | ja | API-Key für OpenAI |
-| `OPENAI_MODEL` | nein | Standard: `gpt-4o-mini` |
+| `GEMINI_API_KEY` | ja | API-Key für die Google Gemini API |
+| `GEMINI_MODEL` | nein | Standard: `gemini-3.6-flash` |
 
 ## Weiterführende Dokumentation
 
@@ -88,7 +88,6 @@ App läuft danach unter [http://localhost:3000](http://localhost:3000).
 - Echtes PDF-Text-Parsing statt Rohtext-Auslesen
 - Unit-Tests für `lib/rag/*` (Operationen sind bereits isoliert testbar)
 - Einzelne Quellen für den Kontext ein-/ausschaltbar machen
-- Doppelte System-Instruction (`lib/llm/client.ts` vs. `lib/rag/prompt.ts`) zu einer Quelle zusammenführen
 
 ## Entwicklungsprozess
 

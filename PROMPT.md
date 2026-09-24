@@ -103,8 +103,31 @@ zusammengeführt (DRY-Verstoß) – geplanter Folge-Schritt.
 
 ---
 
+## 2026-09-24 – Wechsel von OpenAI zu Gemini (manuell)
+
+**Ziel:** LLM-Anbindung von OpenAI (`gpt-4o-mini`) auf Google Gemini umstellen, da NotebookLM selbst
+auf dem Gemini-3-Ökosystem läuft – das Original des Klons nutzt dasselbe Modell-Fundament.
+
+**Recherche:** Der ursprüngliche Plan ("Gemini 1.5 Pro", wie in frühen NotebookLM-Berichten kolportiert)
+war veraltet. Aktueller Stand (Stand September 2026): NotebookLM läuft auf Gemini 3. Als Modell für
+den Klon wurde `gemini-3.6-flash` gewählt – seit 21. Juli 2026 Googles neuer Standard-Flash-Modell,
+kein Preview-Status, gutes Preis-Leistungs-Verhältnis für einen dokumentenbasierten Chat (kein
+komplexes Reasoning nötig, dafür wäre `gemini-3.1-pro-preview` die Alternative gewesen).
+
+**Vorgehen:** Da `lib/llm/client.ts` durch IOSP isoliert ist (keine Next.js-Abhängigkeiten, keine
+fachliche Logik außerhalb des API-Aufrufs), war der Wechsel auf einen komplett anderen Provider
+nur eine Dateiänderung – `route.ts`, `chunk.ts`, `retrieve.ts` und `prompt.ts` blieben unberührt.
+
+**Nebenbei erledigt:** Die zuvor dokumentierte doppelte System-Instruction (eine in `client.ts`, eine
+in `prompt.ts`) wurde dabei zusammengeführt. `SYSTEM_INSTRUCTION` existiert jetzt nur noch in
+`lib/rag/prompt.ts`, wird von dort exportiert und im Gemini-Client als eigene `systemInstruction`
+übergeben (statt wie vorher in den Prompt-Text eingebettet zu sein).
+
+**Env-Vars geändert:** `OPENAI_API_KEY`/`OPENAI_MODEL` → `GEMINI_API_KEY`/`GEMINI_MODEL`.
+
+---
+
 ## Nächste geplante Prompts
 
 - PDF-Text-Extraktion (echtes Parsing statt Rohtext-Lesen)
 - Unit-Tests für `lib/rag/chunk.ts`, `retrieve.ts`, `prompt.ts`
-- Zusammenführung der doppelten System-Instruction
