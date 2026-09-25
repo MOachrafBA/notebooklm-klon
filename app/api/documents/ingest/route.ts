@@ -1,4 +1,5 @@
 import { PDFParse } from "pdf-parse";
+import { getData as getPdfWorkerData } from "pdf-parse/worker";
 import { chunkDocument } from "@/lib/rag/chunk";
 import { embedDocumentChunk } from "@/lib/rag/embeddings";
 import { saveDocumentChunks } from "@/lib/rag/vectorStore";
@@ -10,6 +11,8 @@ export const runtime = "nodejs";
 const MAX_UPLOAD_SIZE_BYTES = 5_000_000;
 const BAD_REQUEST_MESSAGE = "Bitte sende eine gültige Dokumentquelle und Datei.";
 const SERVER_ERROR_MESSAGE = "Die Quelle konnte nicht verarbeitet werden.";
+
+PDFParse.setWorker(getPdfWorkerData());
 
 function isDocumentMetadata(value: {
   id: FormDataEntryValue | null;
