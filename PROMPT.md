@@ -227,9 +227,116 @@ Supabase-Vector-RAG-Architektur, die serverseitige PDF-Extraktion und die erford
 
 ---
 
+## 2026-09-25: YouTube-URL-Ingestion (Master-Prompt)
+
+**Ziel:** Die bestehende Dokument-Ingestion soll um YouTube-URLs erweitert werden. Ein Nutzer
+soll eine öffentliche YouTube-URL als Quelle hinzufügen können. Der Videoinhalt wird in
+Textform gewonnen, in Chunks geteilt, eingebettet und in Supabase Vector gespeichert. Danach
+muss die Quelle im bestehenden Chat über ihre `documentId` wie eine PDF- oder Textquelle
+retrieval-fähig sein.
+
+**Master-Prompt:**
+
+```text
+Du bist ein erfahrener Senior-Engineer für Next.js 16 App Router, TypeScript, Vercel,
+Google Gemini API und Supabase Vector. Erweitere die bestehende NotebookLM-Klon-Anwendung
+um robuste YouTube-URL-Ingestion. Arbeite zuerst investigativ: Lies die relevanten Dateien,
+die Next.js-16-Dokumentation in node_modules/next/dist/docs/ und die bestehende
+clean_code.md. Verändere keine unabhängigen Bereiche und beginne erst danach mit der
+Implementierung.
+
+## Fachliches Ziel
+
+Ein Nutzer soll eine öffentliche YouTube-URL als neue Quelle hinzufügen können. Die URL muss
+serverseitig validiert werden. Der Inhalt soll als Transkript bezogen werden, anschließend
+dieselbe bestehende Pipeline verwenden wie bei PDF/Text:
+
+YouTube-URL → Transkript → DocumentSource → Chunking → Gemini-Embeddings
+→ Supabase-Vector-Speicherung → Chat-Retrieval über documentId.
+
+Die Lösung muss für lokale Entwicklung und Vercel-Production geeignet sein. Verwende keine
+lokale oder dauerhafte Dateiablage und keine Lösung, die stillschweigend einen langen
+Download-/Transkriptionsprozess in einer Vercel-Request-Function voraussetzt. Bewerte vor
+der Implementierung die Laufzeit- und Provider-Anforderungen der gewählten Transkriptquelle.
+Wenn ein externer Transkriptionsprovider erforderlich ist, dokumentiere die notwendige
+Environment-Variable, den Timeout, die Kosten-/Laufzeitgrenze und die Fehlerfälle. Keine
+Secrets in Client-Code, Git oder Dokumentationsbeispielen.
+
+## Architektur- und Clean-Code-Regeln
+
+- Halte dich strikt an clean_code.md, insbesondere SRP, IOSP, DRY, KISS und YAGNI.
+- API-Routen sind Integrationen: validieren, orchestrieren und Responses formen.
+- Extraktion, URL-Parsing, Provider-Response-Validierung und Metadatenumwandlung gehören in
+  testbare Funktionen unter lib/; sie dürfen keine Next.js-Imports enthalten.
+- Wiederverwende chunkDocument, Embedding-Logik und saveDocumentChunks statt parallele
+  Implementierungen anzulegen.
+- Erweitere die bestehenden Typen um einen passenden Quellentyp (zum Beispiel youtube) und
+  um sourceUrl/Metadaten nur dort, wo dies für Retrieval oder Zitate tatsächlich erforderlich
+  ist. Bestehende PDF-/Text-Quellen müssen abwärtskompatibel bleiben.
+- Verwende keine any-, unknown-as- oder breit gefassten Typ-Casts als Abkürzung. Validierung
+  externer Daten muss über explizite Type Guards erfolgen.
+- Fehler dürfen nicht verschluckt werden. Gib verständliche 4xx-Fehler für ungültige URLs
+  und klare 5xx-Fehler für Provider-, Transkriptions- oder Supabase-Probleme zurück.
+
+## Funktionale Anforderungen
+
+1. Ergänze einen dedizierten serverseitigen Endpoint für YouTube-Ingestion oder erweitere den
+   bestehenden Endpoint nur, wenn dadurch die Verantwortlichkeiten klarer bleiben.
+2. Akzeptiere ausschließlich valide öffentliche YouTube-URLs. Unterstütze mindestens
+   youtube.com/watch?v=... und youtu.be/...; lehne fremde Hosts, leere IDs und offensichtlich
+   manipulierte Eingaben ab.
+3. Begrenze URL-Länge, Request-Dauer und Transkriptgröße. Definiere benannte Konstanten.
+4. Validiere die Provider-Antwort: leeres, fehlerhaftes oder nicht verfügbares Transkript
+   muss eine explizite Fehlermeldung erzeugen.
+5. Speichere die Quelle so, dass sie im bestehenden Sidebar-/Chat-Flow erscheint und über
+   ihre ID in Supabase gefunden wird. Der Chat darf keine vollständigen Transkripte vom
+   Browser an die API senden.
+6. Bewahre die Herkunft der Quelle für Antworten auf: mindestens YouTube-URL, Videotitel
+   sofern verfügbar und Transkriptabschnitt/Index. Erfinde keine Seiten- oder Zeitstempel.
+7. Behandle Videos ohne Untertitel, private/gelöschte Videos, blockierte Regionen,
+   Provider-Timeouts, Rate Limits und doppelte Quellen explizit.
+8. Aktualisiere README.md und .env.example mit Setup, Provider-Konfiguration,
+   Sicherheitsgrenzen und lokalem/Vercel-Betrieb. Dokumentiere, ob eine zusätzliche
+   Infrastruktur oder ein Vercel-kompatibler externer Dienst nötig ist.
+9. Aktualisiere die UI mit einer klaren Eingabemöglichkeit für YouTube-URLs, ohne den
+   bestehenden Datei-Upload unübersichtlich oder regressionsanfällig zu machen.
+
+## Tests und Verifikation
+
+Ergänze fokussierte Tests für:
+
+- gültige und ungültige YouTube-URL-Varianten,
+- URL- und Host-Validierung,
+- Provider-Response-Parsing und leere Transkripte,
+- Mapping in DocumentSource/SourceChunk,
+- Fehlerantworten des Ingestion-Endpoints,
+- unverändertes Verhalten für PDF-/Text-Ingestion.
+
+Führe anschließend mindestens aus:
+
+- npm run lint
+- npm run build
+- git diff --check
+
+Teste zusätzlich den Endpoint mit einer ungültigen URL, ohne einen echten Provider-Call
+auszulösen. Teste den erfolgreichen Providerpfad mit einem Mock oder einer isolierten
+Provider-Funktion. Führe keine kostenpflichtigen externen API-Calls in Tests aus.
+
+## Abschlussbericht
+
+Zeige abschließend:
+
+1. die geänderten Dateien und die Verantwortlichkeit jeder Änderung,
+2. den vollständigen Datenfluss von der YouTube-URL bis zum Supabase-Retrieval,
+3. neue Environment-Variablen und deren Server-only-Grenzen,
+4. die behandelten Fehler- und Laufzeitgrenzen,
+5. die ausgeführten Validierungsbefehle mit Ergebnissen,
+6. verbleibende Einschränkungen, insbesondere fehlende Transkripte und
+   nicht garantierte Zeitstempel.
+```
+---
+
 ## Nächste geplante Prompts
 
 - Unit-Tests für `lib/rag/chunk.ts`, `embeddings.ts`, `vectorStore.ts` und `prompt.ts`
-- Die bestätigte Embedding-Dimension `3072` im Supabase-Schema verwenden und bei Änderungen am
-  Embedding-Modell erneut verifizieren
 - Identitätsgebundene Supabase-RLS-Policies für Multi-User-Zugriff ergänzen
