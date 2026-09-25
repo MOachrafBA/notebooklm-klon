@@ -1,4 +1,4 @@
-export const DOCUMENT_TYPES = ["text", "pdf"] as const;
+export const DOCUMENT_TYPES = ["text", "pdf", "youtube"] as const;
 export type DocumentType = (typeof DOCUMENT_TYPES)[number];
 
 export const CHAT_ROLES = ["user", "assistant"] as const;
@@ -9,6 +9,8 @@ export interface DocumentSource {
   name: string;
   type: DocumentType;
   content: string;
+  sourceUrl?: string;
+  videoId?: string;
 }
 
 export interface SourceChunk {
@@ -17,6 +19,11 @@ export interface SourceChunk {
   documentName: string;
   text: string;
   index: number;
+  sourceUrl?: string;
+  videoId?: string;
+  speaker?: string | null;
+  startMs?: number | null;
+  endMs?: number | null;
 }
 
 export interface ChatMessage {

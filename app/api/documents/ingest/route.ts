@@ -1,7 +1,11 @@
 import { PDFParse } from "pdf-parse";
 import { getData as getPdfWorkerData } from "pdf-parse/worker";
 import { chunkDocument } from "@/lib/rag/chunk";
-import { embedDocumentChunk } from "@/lib/rag/embeddings";
+import {
+  embedDocumentChunks,
+  GeminiEmbeddingError,
+  getGeminiEmbeddingHttpStatus,
+} from "@/lib/rag/embeddings";
 import { saveDocumentChunks } from "@/lib/rag/vectorStore";
 import { DOCUMENT_TYPES, type DocumentSource } from "@/lib/rag/types";
 
@@ -74,15 +78,24 @@ export async function POST(request: Request): Promise<Response> {
     }
     const document: DocumentSource = { ...metadata, content };
     const chunks = chunkDocument(document);
-    const embeddings = await Promise.all(
-      chunks.map((chunk) => embedDocumentChunk(chunk.documentName, chunk.text)),
+    const embeddings = await embedDocumentChunks(
+      chunks.map((chunk) => ({ documentName: chunk.documentName, text: chunk.text })),
     );
     await saveDocumentChunks(chunks, embeddings);
 
     return Response.json({ documentId: document.id, content });
   } catch (error) {
-    const message = error instanceof Error ? error.message : SERVER_ERROR_MESSAGE;
-    console.error("Document ingestion failed:", message);
-    return Response.json({ error: message }, { status: 500 });
+    const message = error instanceof GeminiEmbeddingError
+      ? error.message
+      : SERVER_ERROR_MESSAGE;
+    console.error("Document ingestion failed.");
+    return Response.json(
+      { error: message },
+      {
+        status: error instanceof GeminiEmbeddingError
+          ? getGeminiEmbeddingHttpStatus(error)
+          : 500,
+      },
+    );
   }
 }

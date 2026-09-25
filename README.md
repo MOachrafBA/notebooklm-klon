@@ -25,6 +25,7 @@ erfundenen Fakten. Genau darauf liegt der Fokus dieses Klons.
 | Text-/Markdown-Extraktion beim Upload | ✅ | Serverseitige Extraktion während der Ingestion |
 | Echtes PDF-Text-Parsing (Binärformat) | ✅ | `pdf-parse` extrahiert lesbaren Text serverseitig |
 | Retrieval über Embeddings/Vector-DB | ✅ | Gemini-Embeddings und Supabase Vector (`pgvector`) mit Similarity Retrieval |
+| YouTube-URL als Quelle | ✅ | Verfügbare YouTube-Untertitel, danach dieselbe RAG-Pipeline |
 | Audio Overviews, Video Overviews, Mind Maps, Studio-Panel | ❌ bewusst nicht umgesetzt | Eigenständige Multimedia-Pipelines (TTS/Video-Rendering), außerhalb des Zeitrahmens und nicht Kern der Aufgabe |
 | Quellen einzeln ein-/ausschalten für den Kontext | ❌ (noch offen) | Aktuell fließen immer alle hochgeladenen Quellen in die Suche ein |
 
@@ -92,7 +93,27 @@ Für Vercel müssen dieselben vier Variablen in den Project Settings unter **Env
 Variables** hinterlegt werden. `SUPABASE_SERVICE_ROLE_KEY` darf ausschließlich als
 serverseitige Variable verwendet werden und darf weder in Client-Code noch in eine
 `NEXT_PUBLIC_*`-Variable gelangen. Nach dem Setzen der Variablen kann Vercel den Build und
-die beiden dynamischen API-Routen (`/api/documents/ingest`, `/api/chat`) ausführen.
+die dynamischen API-Routen (`/api/documents/ingest`, `/api/documents/ingest-youtube`,
+`/api/chat`) ausführen.
+
+### YouTube-Untertitel und Betriebsgrenzen
+
+Die Route `/api/documents/ingest-youtube` ruft verfügbare Untertitel über das Paket
+`youtube-transcript-plus` ab und sendet die Segmente durch dieselbe Embedding- und Supabase-
+Pipeline wie andere Quellen. Audio wird weder heruntergeladen noch an AssemblyAI gesendet;
+dafür sind keine zusätzlichen YouTube-/Worker-Secrets und keine Audio-Infrastruktur nötig.
+
+Der Abruf nutzt YouTubes nicht-offizielle Innertube-Schnittstelle und kann brechen, wenn YouTube
+diese ändert oder Zugriffe begrenzt. Untertitel müssen für das Video abrufbar sein; private,
+gelöschte, regional blockierte oder untertitel-deaktivierte Videos funktionieren nicht. Auch
+öffentliche Videos haben nicht zwingend abrufbare Untertitel. Der Abruf hat ein 20-Sekunden-
+Zeitlimit; Transkripte sind auf 2.000 Segmente und 500.000 Zeichen begrenzt. Die UI kann daher
+nicht jede beliebige YouTube-URL erfolgreich importieren. Gemini-Embedding-Kosten fallen bei
+erfolgreicher Verarbeitung weiterhin an. Dokument-Chunks werden gebündelt statt parallel als
+einzelne Requests gesendet; Gemini-429-Antworten werden mit dem vom Anbieter genannten
+Retry-Zeitpunkt erneut versucht und danach als Kontingentfehler zurückgegeben.
+Automatisierte Tests verwenden keine echten YouTube-,
+Gemini- oder Supabase-Aufrufe.
 
 ## Weiterführende Dokumentation
 

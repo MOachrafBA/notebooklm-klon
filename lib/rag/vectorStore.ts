@@ -11,6 +11,11 @@ interface StoredChunk {
   document_name: string;
   chunk_index: number;
   content: string;
+  source_url?: string;
+  video_id?: string;
+  speaker?: string | null;
+  start_ms?: number | null;
+  end_ms?: number | null;
 }
 
 interface MatchedChunk extends StoredChunk {
@@ -36,6 +41,11 @@ function toStoredChunk(chunk: SourceChunk, embedding: number[]): StoredChunk & {
     document_name: chunk.documentName,
     chunk_index: chunk.index,
     content: chunk.text,
+    source_url: chunk.sourceUrl,
+    video_id: chunk.videoId,
+    speaker: chunk.speaker,
+    start_ms: chunk.startMs,
+    end_ms: chunk.endMs,
     embedding,
   };
 }
@@ -100,5 +110,10 @@ export async function retrieveDocumentChunks(
     documentName: chunk.document_name,
     text: chunk.content,
     index: chunk.chunk_index,
+    sourceUrl: chunk.source_url,
+    videoId: chunk.video_id,
+    speaker: chunk.speaker,
+    startMs: chunk.start_ms,
+    endMs: chunk.end_ms,
   }));
 }

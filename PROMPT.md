@@ -227,9 +227,278 @@ Supabase-Vector-RAG-Architektur, die serverseitige PDF-Extraktion und die erford
 
 ---
 
+## 2026-09-25: YouTube-URL-Ingestion (Master-Prompt)
+
+**Ziel:** Die bestehende Dokument-Ingestion soll um YouTube-URLs erweitert werden. Ein Nutzer
+soll eine öffentliche YouTube-URL als Quelle hinzufügen können. Der Videoinhalt wird in
+Textform gewonnen, in Chunks geteilt, eingebettet und in Supabase Vector gespeichert. Danach
+muss die Quelle im bestehenden Chat über ihre `documentId` wie eine PDF- oder Textquelle
+retrieval-fähig sein.
+
+**Master-Prompt:**
+
+```text
+Du bist ein erfahrener Senior-Engineer für Next.js 16 App Router, TypeScript, Vercel,
+Google Gemini API und Supabase Vector. Erweitere die bestehende NotebookLM-Klon-Anwendung
+um robuste YouTube-URL-Ingestion. Arbeite zuerst investigativ: Lies die relevanten Dateien,
+die Next.js-16-Dokumentation in node_modules/next/dist/docs/ und die bestehende
+clean_code.md. Verändere keine unabhängigen Bereiche und beginne erst danach mit der
+Implementierung.
+
+## Fachliches Ziel
+
+Ein Nutzer soll eine öffentliche YouTube-URL als neue Quelle hinzufügen können. Die URL muss
+serverseitig validiert werden. Der Inhalt soll als Transkript bezogen werden, anschließend
+dieselbe bestehende Pipeline verwenden wie bei PDF/Text:
+
+YouTube-URL → Transkript → DocumentSource → Chunking → Gemini-Embeddings
+→ Supabase-Vector-Speicherung → Chat-Retrieval über documentId.
+
+Die Lösung muss für lokale Entwicklung und Vercel-Production geeignet sein. Verwende keine
+lokale oder dauerhafte Dateiablage und keine Lösung, die stillschweigend einen langen
+Download-/Transkriptionsprozess in einer Vercel-Request-Function voraussetzt. Bewerte vor
+der Implementierung die Laufzeit- und Provider-Anforderungen der gewählten Transkriptquelle.
+Wenn ein externer Transkriptionsprovider erforderlich ist, dokumentiere die notwendige
+Environment-Variable, den Timeout, die Kosten-/Laufzeitgrenze und die Fehlerfälle. Keine
+Secrets in Client-Code, Git oder Dokumentationsbeispielen.
+
+## Architektur- und Clean-Code-Regeln
+
+- Halte dich strikt an clean_code.md, insbesondere SRP, IOSP, DRY, KISS und YAGNI.
+- API-Routen sind Integrationen: validieren, orchestrieren und Responses formen.
+- Extraktion, URL-Parsing, Provider-Response-Validierung und Metadatenumwandlung gehören in
+  testbare Funktionen unter lib/; sie dürfen keine Next.js-Imports enthalten.
+- Wiederverwende chunkDocument, Embedding-Logik und saveDocumentChunks statt parallele
+  Implementierungen anzulegen.
+- Erweitere die bestehenden Typen um einen passenden Quellentyp (zum Beispiel youtube) und
+  um sourceUrl/Metadaten nur dort, wo dies für Retrieval oder Zitate tatsächlich erforderlich
+  ist. Bestehende PDF-/Text-Quellen müssen abwärtskompatibel bleiben.
+- Verwende keine any-, unknown-as- oder breit gefassten Typ-Casts als Abkürzung. Validierung
+  externer Daten muss über explizite Type Guards erfolgen.
+- Fehler dürfen nicht verschluckt werden. Gib verständliche 4xx-Fehler für ungültige URLs
+  und klare 5xx-Fehler für Provider-, Transkriptions- oder Supabase-Probleme zurück.
+
+## Funktionale Anforderungen
+
+1. Ergänze einen dedizierten serverseitigen Endpoint für YouTube-Ingestion oder erweitere den
+   bestehenden Endpoint nur, wenn dadurch die Verantwortlichkeiten klarer bleiben.
+2. Akzeptiere ausschließlich valide öffentliche YouTube-URLs. Unterstütze mindestens
+   youtube.com/watch?v=... und youtu.be/...; lehne fremde Hosts, leere IDs und offensichtlich
+   manipulierte Eingaben ab.
+3. Begrenze URL-Länge, Request-Dauer und Transkriptgröße. Definiere benannte Konstanten.
+4. Validiere die Provider-Antwort: leeres, fehlerhaftes oder nicht verfügbares Transkript
+   muss eine explizite Fehlermeldung erzeugen.
+5. Speichere die Quelle so, dass sie im bestehenden Sidebar-/Chat-Flow erscheint und über
+   ihre ID in Supabase gefunden wird. Der Chat darf keine vollständigen Transkripte vom
+   Browser an die API senden.
+6. Bewahre die Herkunft der Quelle für Antworten auf: mindestens YouTube-URL, Videotitel
+   sofern verfügbar und Transkriptabschnitt/Index. Erfinde keine Seiten- oder Zeitstempel.
+7. Behandle Videos ohne Untertitel, private/gelöschte Videos, blockierte Regionen,
+   Provider-Timeouts, Rate Limits und doppelte Quellen explizit.
+8. Aktualisiere README.md und .env.example mit Setup, Provider-Konfiguration,
+   Sicherheitsgrenzen und lokalem/Vercel-Betrieb. Dokumentiere, ob eine zusätzliche
+   Infrastruktur oder ein Vercel-kompatibler externer Dienst nötig ist.
+9. Aktualisiere die UI mit einer klaren Eingabemöglichkeit für YouTube-URLs, ohne den
+   bestehenden Datei-Upload unübersichtlich oder regressionsanfällig zu machen.
+
+## Tests und Verifikation
+
+Ergänze fokussierte Tests für:
+
+- gültige und ungültige YouTube-URL-Varianten,
+- URL- und Host-Validierung,
+- Provider-Response-Parsing und leere Transkripte,
+- Mapping in DocumentSource/SourceChunk,
+- Fehlerantworten des Ingestion-Endpoints,
+- unverändertes Verhalten für PDF-/Text-Ingestion.
+
+Führe anschließend mindestens aus:
+
+- npm run lint
+- npm run build
+- git diff --check
+
+Teste zusätzlich den Endpoint mit einer ungültigen URL, ohne einen echten Provider-Call
+auszulösen. Teste den erfolgreichen Providerpfad mit einem Mock oder einer isolierten
+Provider-Funktion. Führe keine kostenpflichtigen externen API-Calls in Tests aus.
+
+## Abschlussbericht
+
+Zeige abschließend:
+
+1. die geänderten Dateien und die Verantwortlichkeit jeder Änderung,
+2. den vollständigen Datenfluss von der YouTube-URL bis zum Supabase-Retrieval,
+3. neue Environment-Variablen und deren Server-only-Grenzen,
+4. die behandelten Fehler- und Laufzeitgrenzen,
+5. die ausgeführten Validierungsbefehle mit Ergebnissen,
+6. verbleibende Einschränkungen, insbesondere fehlende Transkripte und
+   nicht garantierte Zeitstempel.
+```
+---
+
+## 2026-09-25 – Schritt 2: YouTube-Audio abrufen und Ingestion verbinden (Agenten-Prompt)
+
+**Ausgangslage:** Die YouTube-URL-Validierung ist in `lib/youtube/url.ts` implementiert.
+Die AssemblyAI-Operation in `lib/youtube/assemblyai.ts` kann Audio hochladen, einen
+Transkriptionsjob starten, den Status pollen und Sprechersegmente mit Zeitstempeln validiert
+zurückgeben. Die eigentliche Audio-Beschaffung und die Verbindung mit der bestehenden
+Dokument-Ingestion fehlen noch.
+
+**Prompt für den nächsten Agenten:**
+
+```text
+Du bist ein Senior Fullstack Engineer für Next.js 16 App Router, TypeScript, Vercel,
+AssemblyAI, Google Gemini und Supabase Vector. Implementiere den nächsten vertikalen
+Abschnitt der YouTube-URL-Ingestion in diesem Repository.
+
+## Vor der Implementierung
+
+1. Lies AGENTS.md, clean_code.md, README.md und den relevanten YouTube-Abschnitt in
+   PROMPT.md.
+2. Lies vollständig:
+   - lib/youtube/url.ts
+   - lib/youtube/url.test.ts
+   - lib/youtube/assemblyai.ts
+   - lib/youtube/assemblyai.test.ts
+   - lib/rag/types.ts
+   - lib/rag/chunk.ts
+   - lib/rag/embeddings.ts
+   - lib/rag/vectorStore.ts
+   - app/api/documents/ingest/route.ts
+3. Lies die aktuelle Next.js-16-Dokumentation unter node_modules/next/dist/docs/,
+   insbesondere Route Handler, Runtime-Konfiguration und Server-External-Packages.
+4. Prüfe package.json, .env.example, next.config.ts und den aktuellen Git-Status.
+5. Übernimm keine Änderungen außerhalb des YouTube-Features und überschreibe keine
+   uncommitted Änderungen anderer Arbeitsschritte.
+
+## Ziel
+
+Verbinde eine valide öffentliche YouTube-URL mit der bestehenden RAG-Pipeline:
+
+YouTube-URL → Video-ID validieren → Audio sicher abrufen → AssemblyAI transkribieren
+→ Transcript-Segmente in SourceChunks umwandeln → Gemini-Embeddings
+→ Supabase Vector speichern → Quelle im Chat über documentId verwenden.
+
+PDF- und Text-Ingestion müssen unverändert weiter funktionieren.
+
+## Kritische Architekturentscheidung
+
+Bewerte zuerst, ob Audio-Download mit yt-dlp/FFmpeg innerhalb einer Next.js-
+Vercel-Serverless-Function technisch zuverlässig und lizenz-/betriebsseitig vertretbar ist.
+Implementiere keine scheinbar funktionierende Lösung, die wegen fehlendem FFmpeg, langer
+Laufzeit, großem Speicherbedarf, nicht beschreibbarem Dateisystem oder Vercel-Timeouts
+in Production ausfällt.
+
+Wähle nach dieser Bewertung eine klar dokumentierte Lösung:
+
+- Wenn ein Vercel-kompatibler direkter Audioabruf möglich ist, kapsle ihn in eine kleine,
+  testbare serverseitige Operation ohne dauerhafte Dateien. Begrenze Downloadgröße,
+  MIME-Typen, Redirects, URL-Länge und Laufzeit.
+- Wenn yt-dlp/FFmpeg eine separate Worker- oder externe Infrastruktur benötigt, implementiere
+  keine lokale Täuschung. Dokumentiere die Grenze und kapsle den Audio-Provider so, dass
+  die spätere Worker-Anbindung möglich ist.
+- Falls du für diesen vertikalen Schritt einen externen Audio-Provider verwendest,
+  dokumentiere Endpoint, Authentifizierung, Kosten-/Laufzeitgrenzen, Datenschutz und
+  Environment-Variablen. Secrets dürfen nur serverseitig gelesen werden.
+
+## Implementierungsanforderungen
+
+1. Verwende `validateYouTubeUrl` aus `lib/youtube/url.ts`; dupliziere keine URL-Parsing-Logik.
+2. Erstelle eine dedizierte serverseitige Operation für den Audioabruf oder Provider-Aufruf.
+   Sie darf keine Next.js-Imports enthalten und muss externe Responses explizit validieren.
+3. Erstelle einen dedizierten Endpoint, vorzugsweise
+   `app/api/documents/ingest-youtube/route.ts`.
+   Der Endpoint soll:
+   - JSON mit `url` und einer serverseitig erzeugten oder validierten Quellen-ID akzeptieren,
+   - ungültige Inputs mit 400 beantworten,
+   - die URL validieren,
+   - Transkriptsegmente abrufen,
+   - sie in eine `DocumentSource` und/oder `SourceChunk[]` überführen,
+   - die vorhandenen Embedding- und Supabase-Funktionen wiederverwenden,
+   - keine vollständigen Transkripte an den Browser zurückgeben,
+   - eine minimale Response mit `documentId`, `name`, `type` und optionalen Metadaten liefern.
+4. Verwende für YouTube-Segmente die vorhandenen RAG-Typen oder erweitere sie minimal.
+   Bewahre `sourceUrl`, `videoId`, `speaker`, `startMs` und `endMs` nur dort auf, wo sie
+   tatsächlich für Speicherung und Zitate benötigt werden. Erfinde keine Seitenzahlen.
+5. Passe das Supabase-Schema und `vectorStore.ts` nur an, wenn die Metadaten für Retrieval
+   oder Quellenangaben erforderlich sind. Bestehende Rows und die PDF-/Text-Strecke müssen
+   kompatibel bleiben. Begründe jede Schemaänderung.
+6. Verwende klare, benannte Konstanten für maximale Audiodateigröße, Request-Timeout,
+   Transkriptgröße, maximale Segmentzahl und Polling-Grenzen.
+7. Behandle explizit:
+   - private, gelöschte oder nicht verfügbare Videos,
+   - fehlende Audiospur oder fehlendes Transkript,
+   - AssemblyAI-Fehler, Rate Limits und Timeouts,
+   - zu große Dateien und zu lange Transkripte,
+   - doppelte oder bereits gespeicherte Quellen,
+   - Provider-Antworten mit ungültigem JSON oder fehlenden Pflichtfeldern.
+8. Logge keine API-Keys, Audioinhalte oder vollständigen Transkripte. Verwende keine
+   stillen Fallbacks und keine breiten `catch`-Blöcke ohne klare Fehlerantwort.
+9. Halte `runtime = "nodejs"` für die Route fest, wenn Node-APIs benötigt werden, und
+   erkläre diese Entscheidung. Prüfe `maxDuration` gegen den tatsächlichen Ablauf; erhöhe
+   es nicht ohne Begründung.
+
+## UI- und Typgrenze
+
+Wenn die UI für den End-to-End-Flow erforderlich ist, ergänze eine kleine, klare
+YouTube-URL-Eingabe in der Sidebar und zeige während der Verarbeitung einen Ladezustand.
+Verändere den bestehenden Datei-Upload nicht unnötig. Die UI darf nur Metadaten und
+documentId verwalten; Transkript und API-Keys bleiben serverseitig.
+
+## Tests
+
+Schreibe fokussierte Tests ohne echte AssemblyAI-, YouTube- oder Supabase-Aufrufe:
+
+- Audio-Provider: Response-Validierung, falscher MIME-Typ, Größenlimit, Timeout und
+  Providerfehler,
+- Mapping eines Transcript-Segments zu SourceChunk-Metadaten,
+- Request-Validierung der YouTube-Route,
+- 400 für ungültige URLs,
+- 5xx oder standardisierte Providerfehler für Transkriptionsprobleme,
+- Regression für bestehende PDF-/Text-Ingestion.
+
+Mocke externe Abhängigkeiten an ihrer Integrationsgrenze. Führe keinen kostenpflichtigen
+API-Call in automatisierten Tests aus. Ein optionaler manueller Smoke-Test mit einem kurzen
+öffentlichen Video muss ausdrücklich als kostenpflichtig und nicht als CI-Test dokumentiert
+werden.
+
+## Dokumentation und Validierung
+
+Aktualisiere README.md und .env.example mit:
+
+- `ASSEMBLYAI_API_KEY` als server-only Variable,
+- dem gewählten Audioabruf,
+- lokalen Voraussetzungen,
+- Vercel-Einschränkungen,
+- Kosten-/Laufzeitlimits,
+- bekannten Einschränkungen bei privaten Videos und fehlenden Transkripten.
+
+Führe aus:
+
+- npm run lint
+- npm run build
+- die fokussierten YouTube-Tests
+- git diff --check
+
+Wenn `next build` auf Windows oder wegen einer externen Infrastruktur scheitert, unterscheide
+präzise zwischen Code-/TypeScript-Fehlern und Umgebungs-/Worker-Fehlern und verschweige den
+Fehler nicht.
+
+## Abschlussbericht
+
+Berichte:
+
+1. die Audioabruf-Entscheidung und ihre Vercel-Begründung,
+2. den vollständigen Datenfluss bis Supabase,
+3. jede geänderte Datei und ihre Verantwortung,
+4. neue Limits und Fehlerbehandlung,
+5. neue Environment-Variablen ohne Secret-Werte,
+6. Tests und deren Ergebnisse,
+7. verbleibende Einschränkungen und ein sicherer nächster Schritt.
+```
+---
+
 ## Nächste geplante Prompts
 
 - Unit-Tests für `lib/rag/chunk.ts`, `embeddings.ts`, `vectorStore.ts` und `prompt.ts`
-- Die bestätigte Embedding-Dimension `3072` im Supabase-Schema verwenden und bei Änderungen am
-  Embedding-Modell erneut verifizieren
 - Identitätsgebundene Supabase-RLS-Policies für Multi-User-Zugriff ergänzen

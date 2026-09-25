@@ -12,6 +12,7 @@ interface SidebarProps {
     source: Pick<DocumentSource, "id" | "name" | "type">,
     file: File,
   ) => Promise<void>;
+  onYouTubeAdded: (url: string) => Promise<void>;
   onSourceRemoved: (sourceId: string) => void;
 }
 
@@ -19,9 +20,16 @@ function getDocumentType(fileName: string): DocumentType {
   return fileName.toLocaleLowerCase().endsWith(".pdf") ? "pdf" : "text";
 }
 
-export function Sidebar({ sources, onSourceAdded, onSourceRemoved }: SidebarProps) {
+export function Sidebar({
+  sources,
+  onSourceAdded,
+  onYouTubeAdded,
+  onSourceRemoved,
+}: SidebarProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [youtubeUrl, setYoutubeUrl] = useState("");
+  const [isYouTubeLoading, setIsYouTubeLoading] = useState(false);
 
   async function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -29,6 +37,7 @@ export function Sidebar({ sources, onSourceAdded, onSourceRemoved }: SidebarProp
     if (!file) {
       return;
     }
+
     if (file.size > MAX_UPLOAD_SIZE_BYTES) {
       setUploadError("Dateien dürfen maximal 5 MB groß sein.");
       return;
@@ -45,6 +54,24 @@ export function Sidebar({ sources, onSourceAdded, onSourceRemoved }: SidebarProp
     } catch (error) {
       console.error("File upload failed:", error);
       setUploadError(error instanceof Error ? error.message : "Die Datei konnte nicht gelesen werden.");
+    }
+  }
+
+  async function handleYouTubeSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!youtubeUrl.trim() || isYouTubeLoading) {
+      return;
+    }
+
+    setIsYouTubeLoading(true);
+    try {
+      await onYouTubeAdded(youtubeUrl.trim());
+      setYoutubeUrl("");
+      setUploadError(null);
+    } catch (error) {
+      setUploadError(error instanceof Error ? error.message : "Die YouTube-Quelle konnte nicht gelesen werden.");
+    } finally {
+      setIsYouTubeLoading(false);
     }
   }
 
@@ -71,6 +98,27 @@ export function Sidebar({ sources, onSourceAdded, onSourceRemoved }: SidebarProp
         className="hidden"
       />
       <p className="mt-3 text-xs leading-5 text-slate-400">TXT, MD oder PDF mit lesbarem Text · max. 5 MB</p>
+      <form onSubmit={handleYouTubeSubmit} className="mt-5 space-y-2">
+        <label htmlFor="youtube-url" className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
+          YouTube-URL
+        </label>
+        <input
+          id="youtube-url"
+          type="url"
+          value={youtubeUrl}
+          onChange={(event) => setYoutubeUrl(event.target.value)}
+          placeholder="https://youtu.be/…"
+          disabled={isYouTubeLoading}
+          className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-indigo-400 disabled:bg-slate-50"
+        />
+        <button
+          type="submit"
+          disabled={!youtubeUrl.trim() || isYouTubeLoading}
+          className="w-full rounded-xl border border-indigo-200 px-4 py-2 text-sm font-medium text-indigo-700 transition hover:bg-indigo-50 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {isYouTubeLoading ? "YouTube wird verarbeitet …" : "YouTube-Quelle hinzufügen"}
+        </button>
+      </form>
       {uploadError && <p className="mt-3 text-sm text-rose-600">{uploadError}</p>}
 
       <div className="mt-8">
@@ -83,7 +131,7 @@ export function Sidebar({ sources, onSourceAdded, onSourceRemoved }: SidebarProp
           {sources.map((source) => (
             <li key={source.id} className="group flex items-center gap-3 rounded-xl border border-slate-100 p-3">
               <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-indigo-50 text-xs font-semibold text-indigo-600">
-                {source.type === "pdf" ? "PDF" : "TXT"}
+                {source.type === "pdf" ? "PDF" : source.type === "youtube" ? "YT" : "TXT"}
               </span>
               <span className="min-w-0 flex-1 truncate text-sm text-slate-700">{source.name}</span>
               <button
