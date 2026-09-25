@@ -22,9 +22,9 @@ erfundenen Fakten. Genau darauf liegt der Fokus dieses Klons.
 |---|---|---|
 | Source-grounded Chat mit Zitaten | ✅ | Kernfunktion, Fokus der 7 Tage |
 | Mehrere Quellen hochladen, verwalten, entfernen | ✅ | Sidebar mit aktiver Quellenliste |
-| Text-/Markdown-Extraktion beim Upload | ✅ | Direktes Auslesen im Browser (`file.text()`) |
-| Echtes PDF-Text-Parsing (Binärformat) | ⚠️ teilweise | Aktuell wird der Rohinhalt gelesen, kein dediziertes PDF-Parsing (z. B. `pdf-parse`) – offener Punkt |
-| Retrieval über Embeddings/Vector-DB | ❌ | Stattdessen einfaches Keyword-Scoring über Chunks – bewusste KISS-Entscheidung, kein DB-Setup unter Zeitdruck |
+| Text-/Markdown-Extraktion beim Upload | ✅ | Serverseitige Extraktion während der Ingestion |
+| Echtes PDF-Text-Parsing (Binärformat) | ✅ | `pdf-parse` extrahiert lesbaren Text serverseitig |
+| Retrieval über Embeddings/Vector-DB | ✅ | Gemini-Embeddings und Supabase Vector (`pgvector`) mit Similarity Retrieval |
 | Audio Overviews, Video Overviews, Mind Maps, Studio-Panel | ❌ bewusst nicht umgesetzt | Eigenständige Multimedia-Pipelines (TTS/Video-Rendering), außerhalb des Zeitrahmens und nicht Kern der Aufgabe |
 | Quellen einzeln ein-/ausschalten für den Kontext | ❌ (noch offen) | Aktuell fließen immer alle hochgeladenen Quellen in die Suche ein |
 
@@ -60,8 +60,9 @@ supabase/schema.sql          ← pgvector-Tabelle und Retrieval-RPC
 ```
 
 `route.ts` enthält bewusst keine fachliche Logik – sie orchestriert Embedding, Supabase-Retrieval,
-Prompt-Bau und Gemini-Aufruf. Supabase-Aufrufe liegen in `lib/rag/vectorStore.ts`; die Routen
-enthalten keine direkten Datenbankdetails.
+Prompt-Bau und Gemini-Aufruf. Die Dokument-Ingestion extrahiert Text, chunked das Dokument,
+erzeugt Embeddings und speichert die Chunks serverseitig. Supabase-Aufrufe liegen in
+`lib/rag/vectorStore.ts`; die Routen enthalten keine direkten Datenbankdetails.
 
 ## Setup
 
@@ -83,10 +84,15 @@ App läuft danach unter [http://localhost:3000](http://localhost:3000).
 | `SUPABASE_SERVICE_ROLE_KEY` | ja | Server-only Supabase-Key, niemals im Browser verwenden |
 
 Vor dem Start das SQL aus [`supabase/schema.sql`](./supabase/schema.sql) im Supabase SQL Editor
-ausführen. Die Embedding-Spalte muss dieselbe Dimension haben wie die von
-`gemini-embedding-2` gelieferten Vektoren. Für produktive Indexierung sollte nach einem
-Embedding-Test eine feste Dimension von `vector(3072)` verwendet werden. Der erfolgreiche
-Test mit `gemini-embedding-2` hat 3072 Werte geliefert.
+ausführen. Das Schema aktiviert `pgvector`, erstellt die Chunk-Tabelle und die
+Retrieval-RPC-Funktion. Die Embedding-Spalte ist auf `vector(3072)` gesetzt, passend zur
+aktuell verwendeten Ausgabe von `gemini-embedding-2`.
+
+Für Vercel müssen dieselben vier Variablen in den Project Settings unter **Environment
+Variables** hinterlegt werden. `SUPABASE_SERVICE_ROLE_KEY` darf ausschließlich als
+serverseitige Variable verwendet werden und darf weder in Client-Code noch in eine
+`NEXT_PUBLIC_*`-Variable gelangen. Nach dem Setzen der Variablen kann Vercel den Build und
+die beiden dynamischen API-Routen (`/api/documents/ingest`, `/api/chat`) ausführen.
 
 ## Weiterführende Dokumentation
 
@@ -96,7 +102,6 @@ Test mit `gemini-embedding-2` hat 3072 Werte geliefert.
 
 ## Offene Punkte / nächste Schritte
 
-- Echtes PDF-Text-Parsing statt Rohtext-Auslesen
 - Unit-Tests für `lib/rag/*` (Operationen sind bereits isoliert testbar)
 - Einzelne Quellen für den Kontext ein-/ausschaltbar machen
 

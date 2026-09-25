@@ -208,9 +208,27 @@ Multi-User-Unterstützung hinzukommt, müssen identitätsgebundene RLS-Policies 
 
 ---
 
+## 2026-09-25 – Produktions-Build für PDF-Parsing (manuell)
+
+**Ausgangslage:** Die PDF-Extraktion mit `pdf-parse` funktionierte lokal im Development-Modus,
+aber der Next.js-16-Production-Build schlug mit `non-ecmascript placeable asset` fehl. Ursache
+war das native `@napi-rs/canvas`-Binding, das Turbopack nicht in einen ESM-Chunk einordnen kann.
+
+**Lösung:** `pdf-parse` und `@napi-rs/canvas` wurden in `next.config.ts` über
+`serverExternalPackages` vom Server-Bundling ausgenommen. Dadurch lädt Node.js die nativen
+Abhängigkeiten zur Laufzeit, während der Build erfolgreich bleibt.
+
+**Validierung:** `npm run build` erfolgreich; TypeScript-Prüfung ohne Fehler; PDF-Parsing im
+lokalen Production-Modus mit `npm run start` funktionsfähig.
+
+**Dokumentationsabgleich:** README, PROMPT und `.env.example` enthalten jetzt die aktuelle
+Supabase-Vector-RAG-Architektur, die serverseitige PDF-Extraktion und die erforderlichen
+`SUPABASE_URL`-/`SUPABASE_SERVICE_ROLE_KEY`-Variablen.
+
+---
+
 ## Nächste geplante Prompts
 
-- PDF-Text-Extraktion (echtes Parsing statt Rohtext-Lesen)
 - Unit-Tests für `lib/rag/chunk.ts`, `embeddings.ts`, `vectorStore.ts` und `prompt.ts`
 - Die bestätigte Embedding-Dimension `3072` im Supabase-Schema verwenden und bei Änderungen am
   Embedding-Modell erneut verifizieren
