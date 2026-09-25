@@ -45,3 +45,6 @@ graphify-out/
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+.claude/
+context.md
