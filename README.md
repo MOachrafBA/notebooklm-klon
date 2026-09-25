@@ -80,6 +80,7 @@ App läuft danach unter [http://localhost:3000](http://localhost:3000).
 |---|---|---|
 | `GEMINI_API_KEY` | ja | API-Key für die Google Gemini API |
 | `GEMINI_MODEL` | nein | Standard: `gemini-flash-lite-latest` |
+| `ASSEMBLYAI_API_KEY` | für YouTube-Fallback | Server-only-Key für Audio-Transkription über AssemblyAI |
 | `SUPABASE_URL` | ja | URL des Supabase-Projekts |
 | `SUPABASE_SERVICE_ROLE_KEY` | ja | Server-only Supabase-Key, niemals im Browser verwenden |
 
@@ -91,7 +92,8 @@ aktuell verwendeten Ausgabe von `gemini-embedding-2`.
 Für Vercel müssen dieselben vier Variablen in den Project Settings unter **Environment
 Variables** hinterlegt werden. `SUPABASE_SERVICE_ROLE_KEY` darf ausschließlich als
 serverseitige Variable verwendet werden und darf weder in Client-Code noch in eine
-`NEXT_PUBLIC_*`-Variable gelangen. Nach dem Setzen der Variablen kann Vercel den Build und
+`NEXT_PUBLIC_*`-Variable gelangen. Dasselbe gilt für `ASSEMBLYAI_API_KEY`; der Key darf nur
+in serverseitigen Ingestion-Routen verwendet werden. Nach dem Setzen der Variablen kann Vercel den Build und
 die beiden dynamischen API-Routen (`/api/documents/ingest`, `/api/chat`) ausführen.
 
 ## Weiterführende Dokumentation
