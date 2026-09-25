@@ -1,14 +1,14 @@
-import { fetchYouTubeAudio } from "@/lib/youtube/audioProvider";
-import { transcribeAudio } from "@/lib/youtube/assemblyai";
+import { fetchYouTubeCaptions, YouTubeCaptionsError } from "@/lib/youtube/captions";
 import { transcriptSegmentsToChunks } from "@/lib/youtube/mapping";
 import { validateYouTubeUrl } from "@/lib/youtube/url";
-import { embedDocumentChunk } from "@/lib/rag/embeddings";
+import {
+  embedDocumentChunks,
+  GeminiEmbeddingError,
+  getGeminiEmbeddingHttpStatus,
+} from "@/lib/rag/embeddings";
 import { saveDocumentChunks } from "@/lib/rag/vectorStore";
 
 export const runtime = "nodejs";
-// Audio provider (30s), AssemblyAI polling (up to 60s) and embeddings need
-// headroom; this remains below Vercel's supported Node.js function limits.
-export const maxDuration = 300;
 
 const BAD_REQUEST_MESSAGE = "Bitte sende eine gültige öffentliche YouTube-URL.";
 
@@ -16,12 +16,6 @@ function isRequestBody(value: unknown): value is { url: string } {
   if (typeof value !== "object" || value === null) return false;
   const body = value as { url?: unknown };
   return typeof body.url === "string" && body.url.trim().length > 0;
-}
-
-function getErrorStatus(error: unknown): number {
-  if (error instanceof Error && error.message.includes("Zeitlimit")) return 504;
-  if (error instanceof Error && error.message.includes("Größenlimit")) return 413;
-  return 502;
 }
 
 export async function POST(request: Request): Promise<Response> {
@@ -43,8 +37,7 @@ export async function POST(request: Request): Promise<Response> {
   const documentId = `youtube-${validation.videoId}`;
   const documentName = `YouTube ${validation.videoId}`;
   try {
-    const audio = await fetchYouTubeAudio(validation.canonicalUrl, validation.videoId);
-    const segments = await transcribeAudio(audio);
+    const segments = await fetchYouTubeCaptions(validation.videoId);
     const chunks = transcriptSegmentsToChunks(
       segments,
       documentId,
@@ -52,8 +45,8 @@ export async function POST(request: Request): Promise<Response> {
       validation.canonicalUrl,
       validation.videoId,
     );
-    const embeddings = await Promise.all(
-      chunks.map((chunk) => embedDocumentChunk(chunk.documentName, chunk.text)),
+    const embeddings = await embedDocumentChunks(
+      chunks.map((chunk) => ({ documentName: chunk.documentName, text: chunk.text })),
     );
     await saveDocumentChunks(chunks, embeddings);
 
@@ -66,8 +59,21 @@ export async function POST(request: Request): Promise<Response> {
       segmentCount: chunks.length,
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Die YouTube-Quelle konnte nicht verarbeitet werden.";
-    console.error("YouTube ingestion failed:", message);
-    return Response.json({ error: message }, { status: getErrorStatus(error) });
+    const message = error instanceof YouTubeCaptionsError
+      ? error.message
+      : error instanceof GeminiEmbeddingError
+        ? error.message
+      : "Die YouTube-Quelle konnte nicht verarbeitet werden.";
+    console.error("YouTube caption ingestion failed.");
+    return Response.json(
+      { error: message },
+      {
+        status: error instanceof YouTubeCaptionsError
+          ? error.statusCode
+          : error instanceof GeminiEmbeddingError
+            ? getGeminiEmbeddingHttpStatus(error)
+            : 502,
+      },
+    );
   }
 }

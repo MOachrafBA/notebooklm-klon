@@ -1,8 +1,14 @@
 import type { SourceChunk } from "../rag/types";
-import type { YouTubeTranscriptSegment } from "./assemblyai";
 
 const MAX_TRANSCRIPT_CHARACTERS = 500_000;
 const MAX_TRANSCRIPT_SEGMENTS = 2_000;
+
+export interface YouTubeCaptionSegment {
+  text: string;
+  speaker: string | null;
+  startMs: number;
+  endMs: number;
+}
 
 export const YOUTUBE_TRANSCRIPT_LIMITS = {
   maxCharacters: MAX_TRANSCRIPT_CHARACTERS,
@@ -10,7 +16,7 @@ export const YOUTUBE_TRANSCRIPT_LIMITS = {
 } as const;
 
 export function transcriptSegmentsToChunks(
-  segments: YouTubeTranscriptSegment[],
+  segments: YouTubeCaptionSegment[],
   documentId: string,
   documentName: string,
   sourceUrl: string,

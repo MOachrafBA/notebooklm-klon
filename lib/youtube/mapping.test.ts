@@ -5,7 +5,7 @@ import { transcriptSegmentsToChunks } from "./mapping";
 test("maps transcript metadata to source chunks", () => {
   assert.deepEqual(
     transcriptSegmentsToChunks(
-      [{ text: "Hallo", speaker: "A", startMs: 10, endMs: 20 }],
+      [{ text: "Hallo", speaker: null, startMs: 10, endMs: 20 }],
       "youtube-id",
       "Video",
       "https://www.youtube.com/watch?v=id",
@@ -19,7 +19,7 @@ test("maps transcript metadata to source chunks", () => {
       index: 0,
       sourceUrl: "https://www.youtube.com/watch?v=id",
       videoId: "id",
-      speaker: "A",
+      speaker: null,
       startMs: 10,
       endMs: 20,
     }],
