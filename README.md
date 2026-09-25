@@ -25,6 +25,7 @@ erfundenen Fakten. Genau darauf liegt der Fokus dieses Klons.
 | Text-/Markdown-Extraktion beim Upload | ✅ | Serverseitige Extraktion während der Ingestion |
 | Echtes PDF-Text-Parsing (Binärformat) | ✅ | `pdf-parse` extrahiert lesbaren Text serverseitig |
 | Retrieval über Embeddings/Vector-DB | ✅ | Gemini-Embeddings und Supabase Vector (`pgvector`) mit Similarity Retrieval |
+| YouTube-URL als Quelle | ✅ | Externer Audio-Provider + AssemblyAI, danach dieselbe RAG-Pipeline |
 | Audio Overviews, Video Overviews, Mind Maps, Studio-Panel | ❌ bewusst nicht umgesetzt | Eigenständige Multimedia-Pipelines (TTS/Video-Rendering), außerhalb des Zeitrahmens und nicht Kern der Aufgabe |
 | Quellen einzeln ein-/ausschalten für den Kontext | ❌ (noch offen) | Aktuell fließen immer alle hochgeladenen Quellen in die Suche ein |
 
@@ -80,7 +81,9 @@ App läuft danach unter [http://localhost:3000](http://localhost:3000).
 |---|---|---|
 | `GEMINI_API_KEY` | ja | API-Key für die Google Gemini API |
 | `GEMINI_MODEL` | nein | Standard: `gemini-flash-lite-latest` |
-| `ASSEMBLYAI_API_KEY` | für YouTube-Fallback | Server-only-Key für Audio-Transkription über AssemblyAI |
+| `ASSEMBLYAI_API_KEY` | für YouTube | Server-only-Key für Audio-Transkription über AssemblyAI |
+| `YOUTUBE_AUDIO_PROVIDER_URL` | für YouTube | Server-only-Endpoint eines eigenen/externen Audio-Workers |
+| `YOUTUBE_AUDIO_PROVIDER_API_KEY` | für YouTube | Server-only-Auth für diesen Audio-Worker |
 | `SUPABASE_URL` | ja | URL des Supabase-Projekts |
 | `SUPABASE_SERVICE_ROLE_KEY` | ja | Server-only Supabase-Key, niemals im Browser verwenden |
 
@@ -95,6 +98,29 @@ serverseitige Variable verwendet werden und darf weder in Client-Code noch in ei
 `NEXT_PUBLIC_*`-Variable gelangen. Dasselbe gilt für `ASSEMBLYAI_API_KEY`; der Key darf nur
 in serverseitigen Ingestion-Routen verwendet werden. Nach dem Setzen der Variablen kann Vercel den Build und
 die beiden dynamischen API-Routen (`/api/documents/ingest`, `/api/chat`) ausführen.
+
+### YouTube-Ingestion und Betriebsgrenzen
+
+Die Route `/api/documents/ingest-youtube` validiert zuerst die öffentliche URL und ruft dann
+`YOUTUBE_AUDIO_PROVIDER_URL` mit `{ sourceUrl, videoId }` auf. Dieser Provider ist bewusst ein
+separater Worker/Service: `yt-dlp` und FFmpeg werden nicht in eine Vercel-Serverless-Function
+eingebaut, weil dort Binärdateien, temporäre Dateien, Speicher, Laufzeit und Provider-Timeouts
+nicht zuverlässig kontrolliert werden können. Der Worker muss einen Audio-Response mit einem
+`audio/*`- oder `application/octet-stream`-MIME-Typ liefern; die Function lädt ihn nur in den
+Speicher und übergibt ihn an AssemblyAI. Es werden keine Audio- oder Transkriptdateien
+dauerhaft gespeichert.
+
+Es gelten ein URL-Limit von 2.048 Zeichen, 30 Sekunden Provider-Timeout, 25 MB Audio,
+2.000 Transkriptsegmente und 500.000 Transkriptzeichen. AssemblyAI- und Gemini-Kosten
+entstehen pro erfolgreicher Verarbeitung; Provider- und AssemblyAI-Fehler werden nicht
+verschluckt. Private, gelöschte, regional blockierte Videos und Videos ohne verwertbare
+Audiospur/Transkript werden explizit abgelehnt. Der Provider muss die YouTube-Nutzungsrechte,
+Datenschutzanforderungen und seine eigene yt-dlp/FFmpeg-Lizenzierung verantworten.
+
+Lokal und auf Vercel werden die beiden Provider-Variablen und `ASSEMBLYAI_API_KEY` benötigt;
+der Worker selbst ist eine zusätzliche Infrastruktur. Ein manueller Smoke-Test mit einem
+kurzen öffentlichen Video ist optional, verursacht Provider-/AssemblyAI-Kosten und ist
+ausdrücklich kein CI-Test.
 
 ## Weiterführende Dokumentation
 
