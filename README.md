@@ -35,9 +35,14 @@ erfundenen Fakten. Genau darauf liegt der Fokus dieses Klons.
 - **Styling:** Tailwind CSS 4
 - **LLM:** Google Gemini API (`gemini-flash-lite-latest` als Default, über `GEMINI_MODEL`
   konfigurierbar)
-- **RAG-Ansatz:** Dokumente werden serverseitig gechunkt, mit `gemini-embedding-2` vektorisiert
-  und in Supabase Vector (Postgres/pgvector) gespeichert. Fragen werden ebenfalls eingebettet;
-  relevante Abschnitte kommen über eine Supabase-RPC-Funktion in den Gemini-Prompt.
+- **RAG-Ansatz:** Dokumente werden serverseitig gechunkt, mit dem Gemini-Embedding-Modell
+  `gemini-embedding-2` vektorisiert und in Supabase Vector (Postgres/pgvector) gespeichert.
+  Fragen werden ebenfalls eingebettet; relevante Abschnitte kommen über eine Supabase-RPC-Funktion
+  in den Gemini-Prompt. Alle Quellentypen (PDF, Text, YouTube-Transkript) nutzen bewusst
+  **dasselbe** Embedding-Modell für alle Chunks, da die Vektorräume verschiedener
+  Gemini-Embedding-Modelle laut offizieller Dokumentation inkompatibel sind (siehe `PROMPT.md`).
+  Duplikaterkennung und Batch-Throttling beim Ingest reduzieren vermeidbare Embedding-Aufrufe
+  und Anfrage-Spitzen (Details siehe unten).
 - **Hosting:** Vercel
 
 ## Architektur
@@ -48,7 +53,8 @@ Der Code folgt den Clean-Code-Regeln aus [`clean_code.md`](./clean_code.md), ins
 ```
 app/api/chat/route.ts        ← Integration: validiert, orchestriert, formt Antwort
 lib/rag/chunk.ts             ← Operation: Dokument in Abschnitte teilen
-lib/rag/embeddings.ts        ← Operation: Gemini-Text in Vektoren umwandeln
+lib/rag/documentHash.ts      ← Operation: Content-Hash für Duplikaterkennung
+lib/rag/embeddings.ts        ← Operation: Gemini-Text in Vektoren umwandeln (gedrosselte Batches)
 lib/rag/vectorStore.ts       ← Operation: Chunks in Supabase speichern/abrufen
 lib/rag/prompt.ts            ← Operation: Prompt aus Frage + Kontext bauen
 lib/llm/client.ts            ← Operation: Gemini-Antwort erzeugen
@@ -84,12 +90,40 @@ App läuft danach unter [http://localhost:3000](http://localhost:3000).
 | `SUPABASE_URL` | ja | URL des Supabase-Projekts |
 | `SUPABASE_SERVICE_ROLE_KEY` | ja | Server-only Supabase-Key, niemals im Browser verwenden |
 
+Das Embedding-Modell (`gemini-embedding-2`) ist bewusst **nicht** über eine Umgebungsvariable
+konfigurierbar, sondern eine feste Konstante in `lib/rag/embeddings.ts` – da die Vektorräume
+verschiedener Gemini-Embedding-Modelle inkompatibel sind, würde ein versehentlicher Wechsel
+bestehende Retrieval-Ergebnisse stillschweigend unbrauchbar machen (siehe `PROMPT.md`,
+Eintrag "Embedding-Modell vereinheitlicht").
+
+### Ingestion: Duplikaterkennung und Embedding-Throttling
+
+Vor dem Chunking berechnet `/api/documents/ingest` einen SHA-256-Hash über den extrahierten,
+getrimmten Text und sucht diesen Hash in `document_chunks`. Wird derselbe Textinhalt erneut
+hochgeladen, liefert die Route die bereits gespeicherte Dokument-ID zurück und überspringt
+Chunking, Embedding und erneutes Speichern. Die Prüfung hängt nicht von der vom Client erzeugten
+Dokument-ID ab. Sie vergleicht den extrahierten Text, nicht die Bytes der Originaldatei; zwei
+Dateien, aus denen derselbe Text extrahiert wird, gelten daher als Duplikat.
+
+Das Supabase-Schema ergänzt dafür die nullable Spalte `content_hash` und einen Index. Nach
+Ausführung des aktuellen [`supabase/schema.sql`](./supabase/schema.sql) werden bestehende
+Einträge nicht rückwirkend gehasht: Für bereits gespeicherte Chunks ohne Hash kann die
+Duplikaterkennung erst greifen, wenn sie neu ingestiert und mit Hash gespeichert wurden.
+
+Dokument-Chunks werden in geordneten Batches von höchstens 100 Requests eingebettet. Zwischen
+aufeinanderfolgenden Batches wartet der Ingest 500 ms; für Dokumente mit höchstens 100 Chunks
+entsteht dadurch keine zusätzliche Pause. Das dämpft Anfragespitzen, garantiert aber keine
+Einhaltung eines Tokens-pro-Minute-Kontingents: Die Wartezeit berücksichtigt weder die
+Tokenmenge pro Batch noch gleichzeitige Uploads. Das Throttling ist pro Ingestion-Anfrage und
+keine projektweite Warteschlange. Wiederholte Gemini-429-Antworten werden zusätzlich mit dem
+vom Anbieter angegebenen Retry-Zeitpunkt erneut versucht.
+
 Vor dem Start das SQL aus [`supabase/schema.sql`](./supabase/schema.sql) im Supabase SQL Editor
 ausführen. Das Schema aktiviert `pgvector`, erstellt die Chunk-Tabelle und die
 Retrieval-RPC-Funktion. Die Embedding-Spalte ist auf `vector(3072)` gesetzt, passend zur
 aktuell verwendeten Ausgabe von `gemini-embedding-2`.
 
-Für Vercel müssen dieselben vier Variablen in den Project Settings unter **Environment
+Für Vercel müssen dieselben Umgebungsvariablen in den Project Settings unter **Environment
 Variables** hinterlegt werden. `SUPABASE_SERVICE_ROLE_KEY` darf ausschließlich als
 serverseitige Variable verwendet werden und darf weder in Client-Code noch in eine
 `NEXT_PUBLIC_*`-Variable gelangen. Nach dem Setzen der Variablen kann Vercel den Build und

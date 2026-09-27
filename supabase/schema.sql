@@ -20,11 +20,15 @@ alter table document_chunks add column if not exists video_id text;
 alter table document_chunks add column if not exists speaker text;
 alter table document_chunks add column if not exists start_ms integer;
 alter table document_chunks add column if not exists end_ms integer;
+alter table document_chunks add column if not exists content_hash text;
 
 alter table document_chunks enable row level security; /*rls message*/
 
 create index if not exists document_chunks_document_id_idx
   on document_chunks (document_id);
+
+create index if not exists document_chunks_content_hash_idx
+  on document_chunks (content_hash);
 
 drop function if exists match_document_chunks(vector, integer, text[]);
 

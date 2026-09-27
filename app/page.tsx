@@ -5,7 +5,7 @@ import { ChatPanel } from "@/app/components/ChatPanel";
 import { Sidebar } from "@/app/components/Sidebar";
 import type { DocumentSource } from "@/lib/rag/types";
 
-interface IngestResponse { content: string }
+interface IngestResponse { documentId: string; content: string; duplicate?: boolean }
 interface YouTubeIngestResponse {
   documentId: string;
   name: string;
@@ -19,8 +19,13 @@ function isIngestResponse(value: unknown): value is IngestResponse {
     return false;
   }
 
-  const response = value as { content?: unknown };
-  return typeof response.content === "string" && response.content.trim().length > 0;
+  const response = value as { documentId?: unknown; content?: unknown };
+  return (
+    typeof response.documentId === "string" &&
+    response.documentId.length > 0 &&
+    typeof response.content === "string" &&
+    response.content.trim().length > 0
+  );
 }
 
 function isYouTubeIngestResponse(value: unknown): value is YouTubeIngestResponse {
@@ -67,7 +72,10 @@ export default function Home() {
     if (!isIngestResponse(payload)) {
       throw new Error("Die Datei enthält keinen lesbaren Text.");
     }
-    setSources((current) => [...current, { ...source, content: payload.content }]);
+    setSources((current) => [
+      ...current.filter((existing) => existing.id !== payload.documentId),
+      { ...source, id: payload.documentId, content: payload.content },
+    ]);
   }
 
   async function addYouTubeSource(url: string) {

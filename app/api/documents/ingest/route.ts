@@ -1,12 +1,13 @@
 import { PDFParse } from "pdf-parse";
 import { getData as getPdfWorkerData } from "pdf-parse/worker";
 import { chunkDocument } from "@/lib/rag/chunk";
+import { computeContentHash } from "@/lib/rag/documentHash";
 import {
   embedDocumentChunks,
   GeminiEmbeddingError,
   getGeminiEmbeddingHttpStatus,
 } from "@/lib/rag/embeddings";
-import { saveDocumentChunks } from "@/lib/rag/vectorStore";
+import { findDocumentIdByContentHash, saveDocumentChunks } from "@/lib/rag/vectorStore";
 import { DOCUMENT_TYPES, type DocumentSource } from "@/lib/rag/types";
 
 export const maxDuration = 60;
@@ -76,14 +77,21 @@ export async function POST(request: Request): Promise<Response> {
     if (!content) {
       return Response.json({ error: "Die Datei enthält keinen lesbaren Text." }, { status: 400 });
     }
+
+    const contentHash = computeContentHash(content);
+    const existingDocumentId = await findDocumentIdByContentHash(contentHash);
+    if (existingDocumentId) {
+      return Response.json({ documentId: existingDocumentId, content, duplicate: true });
+    }
+
     const document: DocumentSource = { ...metadata, content };
     const chunks = chunkDocument(document);
     const embeddings = await embedDocumentChunks(
       chunks.map((chunk) => ({ documentName: chunk.documentName, text: chunk.text })),
     );
-    await saveDocumentChunks(chunks, embeddings);
+    await saveDocumentChunks(chunks, embeddings, contentHash);
 
-    return Response.json({ documentId: document.id, content });
+    return Response.json({ documentId: document.id, content, duplicate: false });
   } catch (error) {
     const message = error instanceof GeminiEmbeddingError
       ? error.message

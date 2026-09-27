@@ -16,6 +16,7 @@ interface StoredChunk {
   speaker?: string | null;
   start_ms?: number | null;
   end_ms?: number | null;
+  content_hash?: string | null;
 }
 
 interface MatchedChunk extends StoredChunk {
@@ -34,7 +35,11 @@ function getSupabaseClient(): SupabaseClient {
   });
 }
 
-function toStoredChunk(chunk: SourceChunk, embedding: number[]): StoredChunk & { embedding: number[] } {
+function toStoredChunk(
+  chunk: SourceChunk,
+  embedding: number[],
+  contentHash: string | null,
+): StoredChunk & { embedding: number[] } {
   return {
     id: chunk.id,
     document_id: chunk.documentId,
@@ -46,6 +51,7 @@ function toStoredChunk(chunk: SourceChunk, embedding: number[]): StoredChunk & {
     speaker: chunk.speaker,
     start_ms: chunk.startMs,
     end_ms: chunk.endMs,
+    content_hash: contentHash,
     embedding,
   };
 }
@@ -69,6 +75,7 @@ function isMatchedChunk(value: unknown): value is MatchedChunk {
 export async function saveDocumentChunks(
   chunks: SourceChunk[],
   embeddings: number[][],
+  contentHash: string | null = null,
 ): Promise<void> {
   if (chunks.length !== embeddings.length) {
     throw new Error("Chunk- und Embedding-Anzahl stimmen nicht überein.");
@@ -78,11 +85,34 @@ export async function saveDocumentChunks(
     return;
   }
 
-  const rows = chunks.map((chunk, index) => toStoredChunk(chunk, embeddings[index]));
+  const rows = chunks.map((chunk, index) => toStoredChunk(chunk, embeddings[index], contentHash));
   const { error } = await getSupabaseClient().from(DOCUMENT_CHUNKS_TABLE).upsert(rows);
   if (error) {
     throw new Error(`Supabase konnte Chunks nicht speichern: ${error.message}`);
   }
+}
+
+/**
+ * Operation: sucht ein bereits gespeichertes Dokument anhand seines
+ * Content-Hashes. Dient der Duplikaterkennung, damit dieselbe Datei nicht bei
+ * jedem erneuten Upload erneut gechunkt, embedded (Gemini-Quota!) und
+ * gespeichert wird.
+ */
+export async function findDocumentIdByContentHash(
+  contentHash: string,
+): Promise<string | null> {
+  const { data, error } = await getSupabaseClient()
+    .from(DOCUMENT_CHUNKS_TABLE)
+    .select("document_id")
+    .eq("content_hash", contentHash)
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`Supabase konnte nicht nach Duplikaten suchen: ${error.message}`);
+  }
+
+  return (data as { document_id: string } | null)?.document_id ?? null;
 }
 
 export async function retrieveDocumentChunks(

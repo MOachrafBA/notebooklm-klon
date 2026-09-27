@@ -1,13 +1,18 @@
-const GEMINI_EMBEDDING_URL =
-  "https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-2:embedContent";
-const GEMINI_BATCH_EMBEDDING_URL =
-  "https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-2:batchEmbedContents";
+const GEMINI_EMBEDDING_API_BASE_URL = "https://generativelanguage.googleapis.com/v1beta";
 const EMBEDDING_MODEL = "models/gemini-embedding-2";
 const REQUEST_TIMEOUT_MS = 60_000;
 const MAX_EMBEDDINGS_PER_BATCH = 100;
 const MAX_RATE_LIMIT_RETRIES = 3;
 const DEFAULT_RATE_LIMIT_DELAY_MS = 2_000;
 const MAX_RATE_LIMIT_DELAY_MS = 30_000;
+/**
+ * Pause zwischen aufeinanderfolgenden Embedding-Batches innerhalb eines
+ * großen Dokuments (>100 Chunks). Verhindert Bursts, die das TPM-Kontingent
+ * des Gemini-Embedding-Free-Tiers sprengen.
+ */
+const EMBEDDING_BATCH_DELAY_MS = 500;
+
+type EmbeddingModel = typeof EMBEDDING_MODEL;
 
 interface GeminiEmbeddingResponse {
   embedding?: {
@@ -73,6 +78,10 @@ function getApiKey(): string {
   return apiKey;
 }
 
+function getEmbeddingModel(): EmbeddingModel {
+  return EMBEDDING_MODEL;
+}
+
 function isValidVector(values: unknown): values is number[] {
   return (
     Array.isArray(values) &&
@@ -124,6 +133,7 @@ async function requestEmbeddings(
   apiKey: string,
   fetchImplementation: typeof fetch = fetch,
 ): Promise<number[][]> {
+  const model = getEmbeddingModel();
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
@@ -131,7 +141,7 @@ async function requestEmbeddings(
     for (let attempt = 0; ; attempt += 1) {
       const isBatch = texts.length > 1;
       const response = await fetchImplementation(
-        isBatch ? GEMINI_BATCH_EMBEDDING_URL : GEMINI_EMBEDDING_URL,
+        `${GEMINI_EMBEDDING_API_BASE_URL}/${model}:${isBatch ? "batchEmbedContents" : "embedContent"}`,
         {
           method: "POST",
           headers: {
@@ -142,13 +152,13 @@ async function requestEmbeddings(
             isBatch
               ? {
                   requests: texts.map((text) => ({
-                    model: EMBEDDING_MODEL,
+                    model,
                     content: { parts: [{ text }] },
                     taskType: "RETRIEVAL_DOCUMENT",
                   })),
                 }
               : {
-                  model: EMBEDDING_MODEL,
+                  model,
                   content: { parts: [{ text: texts[0] }] },
                   taskType: "RETRIEVAL_DOCUMENT",
                 },
@@ -210,6 +220,10 @@ async function requestEmbeddings(
   }
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 async function requestEmbedding(text: string): Promise<number[]> {
   const [embedding] = await requestEmbeddings([text], getApiKey());
   return embedding;
@@ -227,6 +241,9 @@ export async function embedDocumentChunks(inputs: EmbeddingInput[]): Promise<num
   const embeddings: number[][] = [];
 
   for (let start = 0; start < texts.length; start += MAX_EMBEDDINGS_PER_BATCH) {
+    if (start > 0) {
+      await sleep(EMBEDDING_BATCH_DELAY_MS);
+    }
     const batch = texts.slice(start, start + MAX_EMBEDDINGS_PER_BATCH);
     embeddings.push(...await requestEmbeddings(batch, apiKey));
   }

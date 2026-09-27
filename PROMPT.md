@@ -502,3 +502,67 @@ Berichte:
 
 - Unit-Tests für `lib/rag/chunk.ts`, `embeddings.ts`, `vectorStore.ts` und `prompt.ts`
 - Identitätsgebundene Supabase-RLS-Policies für Multi-User-Zugriff ergänzen
+
+---
+
+## 2026-09-26 – Embedding-Modell vereinheitlicht statt pro Quelle gesplittet (manuell, mit Claude)
+
+**Ausgangslage:** Überlegung, `gemini-embedding-001` exklusiv für Text (PDF/MD) und
+`gemini-embedding-2` exklusiv für YouTube-Quellen zu verwenden, in der Annahme, YouTube brauche
+echte Multimodalität.
+
+**Gegencheck gegen die offizielle Gemini-API-Doku (ai.google.dev/gemini-api/docs/embeddings):**
+
+- Die Vektorräume von `gemini-embedding-001` und `gemini-embedding-2` sind laut Google explizit
+  **inkompatibel** – Embeddings der beiden Modelle sind nicht direkt vergleichbar. Da die
+  Chat-Suche (`match_document_chunks`) eine einzige Similarity-Abfrage über alle Chunks eines
+  Nutzers macht, hätte ein Mix aus beiden Modellen in derselben Vektor-Spalte zu einer stillen,
+  semantisch falschen Suche geführt (kein Fehler, aber bedeutungslose Ähnlichkeitswerte).
+- Die eigene YouTube-Pipeline (AssemblyAI transkribiert Audio zu Text, erst danach Chunking/
+  Embedding) verarbeitet ohnehin nur Text – der ursprüngliche Grund für Multimodalität
+  (rohes Audio/Video/Bild direkt embedden) trifft auf den aktuellen Anwendungsfall nicht zu.
+- `gemini-embedding-2` ist laut Modell-Tabelle inzwischen **Stable** (GA seit April 2026, nicht
+  mehr Preview), hat ein größeres Kontextfenster (8.192 statt 2.048 Tokens) und das bereits
+  implementierte Prompt-Format (`title: ... | text: ...`, `task: question answering | query: ...`)
+  entspricht exakt der von `gemini-embedding-2` verlangten Konvention.
+
+**Entscheidung:** Einheitlich `gemini-embedding-2` für alle Chunks (PDF, MD, YouTube-Transkript).
+`gemini-embedding-001` wurde als Option aus `lib/rag/embeddings.ts` entfernt, `EMBEDDING_MODEL`
+aus `.env.example` gestrichen (Modell ist jetzt eine feste Konstante, nicht mehr konfigurierbar),
+um zu verhindern, dass später versehentlich beide Modelle gemischt werden.
+
+---
+
+## 2026-09-26 – Rate-Limit-Entlastung: Ingestion-Throttling + Duplikat-Erkennung (manuell, mit Claude)
+
+**Ausgangslage:** Free-Tier-Kontingent für `gemini-embedding-2` wiederholt überschritten
+(Google-AI-Studio-Dashboard zeigte u. a. 107/100 für Embedding-2 und 30.76K/30K für ein
+Token-Kontingent). Auslöser war unter anderem wiederholtes Testen mit derselben PDF-Datei – jeder
+erneute Upload hat die Datei komplett neu gechunkt und eingebettet, obwohl der Inhalt identisch
+war. Billing-Upgrade war explizit keine Option (Free-Tier soll beibehalten werden).
+
+**Bewusst verworfen:** Ein zweites Embedding-Modell zur Lastverteilung einzusetzen (siehe
+vorheriger Eintrag) – hätte das Rate-Limit-Problem zwar mutmaßlich entschärft, aber die
+Vektorsuche durch inkompatible Embedding-Räume beschädigt. Rate-Limits und Retrieval-
+Korrektheit sind zwei getrennte Probleme und wurden bewusst getrennt gelöst.
+
+**Umsetzung:**
+
+1. **Content-Hash-Duplikaterkennung** (`lib/rag/documentHash.ts`, neue isolierte Operation):
+   SHA-256-Hash des extrahierten Textinhalts. `app/api/documents/ingest/route.ts` prüft vor
+   Chunking/Embedding, ob bereits ein Dokument mit demselben Hash in Supabase existiert
+   (`findDocumentIdByContentHash` in `vectorStore.ts`) und gibt bei einem Treffer direkt die
+   bestehende `documentId` zurück, ohne erneut zu embedden. `content_hash` wurde als Spalte plus
+   Index in `supabase/schema.sql` ergänzt. `app/page.tsx` verwendet jetzt die vom Server
+   zurückgegebene `documentId` statt der clientseitig generierten ID (Konsistenz mit dem
+   YouTube-Pfad, der das bereits so gemacht hat) – sonst hätte ein erkanntes Duplikat im
+   Chat auf eine ID verwiesen, unter der in Supabase keine Chunks liegen.
+2. **Batch-Throttling** (`lib/rag/embeddings.ts`): 500ms Pause zwischen aufeinanderfolgenden
+   Embedding-Batches bei Dokumenten mit mehr als 100 Chunks, um Token-Bursts innerhalb einer
+   Minute zu vermeiden. Wirkt sich auf kleine Dokumente (ein Batch) nicht aus.
+
+**Bekannte Grenze:** Das Throttling wirkt nur innerhalb einer einzelnen Ingestion-Anfrage. Werden
+mehrere Dateien gleichzeitig hochgeladen, laufen ihre Embedding-Batches weiterhin parallel und
+könnten gemeinsam das Kontingent sprengen. Für den aktuellen Gebrauch (einzelne Uploads während
+einer Demo) ausreichend; bei echtem Mehrbenutzerbetrieb wäre eine projektweite Warteschlange
+nötig.
