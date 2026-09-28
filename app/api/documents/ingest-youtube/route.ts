@@ -9,6 +9,7 @@ import {
 import { saveDocumentChunks } from "@/lib/rag/vectorStore";
 
 export const runtime = "nodejs";
+export const maxDuration = 60;
 
 const BAD_REQUEST_MESSAGE = "Bitte sende eine gültige öffentliche YouTube-URL.";
 

@@ -1,13 +1,15 @@
 # Sourcewise – ein NotebookLM-Klon
 
 Ein dokumentenbasiertes Chat-Tool im Stil von [Google NotebookLM](https://notebooklm.google.com/):
-Quellen (PDF/Text) hochladen, Fragen stellen, Antworten ausschließlich auf Basis der hochgeladenen
-Dokumente erhalten – inklusive Quellenangabe.
+Quellen (PDF, Text, YouTube-Untertitel) hinzufügen, Fragen stellen, Antworten ausschließlich auf
+Basis der hinzugefügten Quellen erhalten – inklusive Quellenangabe.
 
 Entstanden als Testaufgabe unter 7 Tagen Zeitdruck, mit Fokus auf sauberer Architektur
 (Clean Code / IOSP) statt Feature-Vollständigkeit.
 
-**Live-Demo:** _(Vercel-Link hier ergänzen, sobald deployed)_
+**Live-Demo:** [notebooklm-klon-five.vercel.app](https://notebooklm-klon-five.vercel.app/)
+_(PDF- und Text-Quellen funktionieren in Production; YouTube-Quellen sind auf Vercel wegen
+YouTube-IP-Blocking eingeschränkt, siehe Abschnitt "Bekannte Einschränkung in Production")_
 
 ---
 
@@ -25,7 +27,7 @@ erfundenen Fakten. Genau darauf liegt der Fokus dieses Klons.
 | Text-/Markdown-Extraktion beim Upload | ✅ | Serverseitige Extraktion während der Ingestion |
 | Echtes PDF-Text-Parsing (Binärformat) | ✅ | `pdf-parse` extrahiert lesbaren Text serverseitig |
 | Retrieval über Embeddings/Vector-DB | ✅ | Gemini-Embeddings und Supabase Vector (`pgvector`) mit Similarity Retrieval |
-| YouTube-URL als Quelle | ✅ | Verfügbare YouTube-Untertitel, danach dieselbe RAG-Pipeline |
+| YouTube-URL als Quelle | ⚠️ lokal ja, auf Vercel eingeschränkt | Verfügbare YouTube-Untertitel, danach dieselbe RAG-Pipeline – funktioniert zuverlässig lokal, auf Vercel durch YouTubes IP-Blocking gegen Cloud-Provider bekannt unzuverlässig (siehe Abschnitt unten) |
 | Audio Overviews, Video Overviews, Mind Maps, Studio-Panel | ❌ bewusst nicht umgesetzt | Eigenständige Multimedia-Pipelines (TTS/Video-Rendering), außerhalb des Zeitrahmens und nicht Kern der Aufgabe |
 | Quellen einzeln ein-/ausschalten für den Kontext | ❌ (noch offen) | Aktuell fließen immer alle hochgeladenen Quellen in die Suche ein |
 
@@ -123,6 +125,13 @@ ausführen. Das Schema aktiviert `pgvector`, erstellt die Chunk-Tabelle und die
 Retrieval-RPC-Funktion. Die Embedding-Spalte ist auf `vector(3072)` gesetzt, passend zur
 aktuell verwendeten Ausgabe von `gemini-embedding-2`.
 
+**Billing-Hinweis:** Der kostenlose Gemini-Developer-API-Tier reicht für wiederholtes Testen
+nicht aus (niedrige RPM/TPM-Limits). Ein Google-AI-Pro-Abo (auch Studenten-Variante) hilft hier
+**nicht** – dessen Vorteile gelten laut Google nur innerhalb der AI-Studio-Weboberfläche, nicht
+für direkte API-Aufrufe. Dieses Projekt nutzt daher Prepaid-Billing im Google-AI-Studio-Projekt
+(niedrige Kosten pro Embedding-Aufruf, deutlich höhere Rate-Limits). Siehe `PROMPT.md` für
+Details und einen bekannten `402`-Fehlerfall bei aufgebrauchtem/nicht synchronisiertem Guthaben.
+
 Für Vercel müssen dieselben Umgebungsvariablen in den Project Settings unter **Environment
 Variables** hinterlegt werden. `SUPABASE_SERVICE_ROLE_KEY` darf ausschließlich als
 serverseitige Variable verwendet werden und darf weder in Client-Code noch in eine
@@ -148,6 +157,16 @@ einzelne Requests gesendet; Gemini-429-Antworten werden mit dem vom Anbieter gen
 Retry-Zeitpunkt erneut versucht und danach als Kontingentfehler zurückgegeben.
 Automatisierte Tests verwenden keine echten YouTube-,
 Gemini- oder Supabase-Aufrufe.
+
+**Bekannte Einschränkung in Production (Vercel):** YouTube erkennt und blockiert Anfragen von
+Cloud-/Datacenter-IP-Bereichen (u. a. AWS, GCP, Vercel) systematisch – die App meldet dann
+"keine abrufbaren Untertitel", obwohl das Video welche hat. Dieselbe Fehlermeldung entsteht
+sowohl bei tatsächlich fehlenden Untertiteln als auch bei IP-Blocking; beides ist auf
+Protokollebene nicht unterscheidbar. Das ist ein bekanntes, breit dokumentiertes Problem
+inoffizieller YouTube-Transkript-Bibliotheken, kein projektspezifischer Bug (siehe `PROMPT.md`,
+Eintrag vom 27.09.2026). Ein zuverlässiger Fix (Residential-Proxy oder bezahlter
+Managed-Transcript-Dienst) wäre möglich, wurde aber bewusst zurückgestellt, um zusätzliche
+Kosten und Secrets zu vermeiden. Lokal funktioniert die YouTube-Ingestion zuverlässig.
 
 ## Weiterführende Dokumentation
 

@@ -44,6 +44,7 @@ export class GeminiEmbeddingError extends Error {
 export function getGeminiEmbeddingHttpStatus(error: GeminiEmbeddingError): number {
   if (error.statusCode === 429 || error.statusCode === 503) return 503;
   if (error.statusCode === 504) return 504;
+  if (error.statusCode === 402) return 402;
   return 502;
 }
 
@@ -134,13 +135,16 @@ async function requestEmbeddings(
   fetchImplementation: typeof fetch = fetch,
 ): Promise<number[][]> {
   const model = getEmbeddingModel();
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const isBatch = texts.length > 1;
 
-  try {
-    for (let attempt = 0; ; attempt += 1) {
-      const isBatch = texts.length > 1;
-      const response = await fetchImplementation(
+  for (let attempt = 0; ; attempt += 1) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+    let response: Response;
+    let payload: unknown;
+
+    try {
+      response = await fetchImplementation(
         `${GEMINI_EMBEDDING_API_BASE_URL}/${model}:${isBatch ? "batchEmbedContents" : "embedContent"}`,
         {
           method: "POST",
@@ -166,57 +170,65 @@ async function requestEmbeddings(
           signal: controller.signal,
         },
       );
-
-      const payload: unknown = await response.json().catch(() => null);
-      if (!response.ok) {
-        if (isRetryableStatus(response.status) && attempt < MAX_RATE_LIMIT_RETRIES) {
-          await new Promise((resolve) =>
-            setTimeout(resolve, getRetryDelayMs(payload, attempt)),
-          );
+      payload = await response.json().catch(() => null);
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") {
+        if (attempt < MAX_RATE_LIMIT_RETRIES) {
+          await sleep(getRetryDelayMs(null, attempt));
           continue;
         }
-        if (response.status === 429) {
-          throw new GeminiEmbeddingError(
-            "Das Gemini-Embedding-Kontingent ist ausgeschöpft. Bitte warte kurz oder prüfe dein Google-AI-Kontingent und die Abrechnung.",
-            429,
-          );
-        }
         throw new GeminiEmbeddingError(
-          `Die Gemini-Embedding-Anfrage ist fehlgeschlagen (${response.status}).`,
-          response.status >= 500 ? 502 : response.status,
+          `Die Gemini-Embedding-Anfrage hat das Zeitlimit von ${REQUEST_TIMEOUT_MS / 1_000} Sekunden überschritten.`,
+          504,
         );
       }
-
-      if (texts.length === 1) {
-        if (!isEmbeddingResponse(payload) || !isValidVector(payload.embedding?.values)) {
-          throw new GeminiEmbeddingError("Die Embedding-Antwort hat ein ungültiges Format.", 502);
-        }
-        return [payload.embedding.values];
-      }
-
-      if (!isBatchEmbeddingResponse(payload) || payload.embeddings.length !== texts.length) {
-        throw new GeminiEmbeddingError("Die Batch-Embedding-Antwort hat ein ungültiges Format.", 502);
-      }
-      const vectors: number[][] = [];
-      for (const embedding of payload.embeddings) {
-        if (!isValidVector(embedding.values)) {
-          throw new GeminiEmbeddingError("Die Batch-Embedding-Antwort hat ein ungültiges Format.", 502);
-        }
-        vectors.push(embedding.values);
-      }
-      return vectors;
+      throw new GeminiEmbeddingError("Gemini konnte die Embeddings nicht erzeugen.", 502);
+    } finally {
+      clearTimeout(timeout);
     }
-  } catch (error) {
-    if (error instanceof GeminiEmbeddingError) throw error;
-    if (error instanceof DOMException && error.name === "AbortError") {
+
+    if (!response.ok) {
+      if (isRetryableStatus(response.status) && attempt < MAX_RATE_LIMIT_RETRIES) {
+        await sleep(getRetryDelayMs(payload, attempt));
+        continue;
+      }
+      if (response.status === 429) {
+        throw new GeminiEmbeddingError(
+          "Das Gemini-Embedding-Kontingent ist ausgeschöpft. Bitte warte kurz oder prüfe dein Google-AI-Kontingent und die Abrechnung.",
+          429,
+        );
+      }
+      if (response.status === 402) {
+        throw new GeminiEmbeddingError(
+          "Das Prepaid-Guthaben für die Gemini API ist aufgebraucht (oder noch nicht synchronisiert). " +
+            "Bitte den Kontostand unter aistudio.google.com im Billing-Bereich prüfen.",
+          402,
+        );
+      }
       throw new GeminiEmbeddingError(
-        "Die Gemini-Embedding-Anfrage hat das Zeitlimit von 60 Sekunden überschritten.",
-        504,
+        `Die Gemini-Embedding-Anfrage ist fehlgeschlagen (${response.status}).`,
+        response.status >= 500 ? 502 : response.status,
       );
     }
-    throw new GeminiEmbeddingError("Gemini konnte die Embeddings nicht erzeugen.", 502);
-  } finally {
-    clearTimeout(timeout);
+
+    if (texts.length === 1) {
+      if (!isEmbeddingResponse(payload) || !isValidVector(payload.embedding?.values)) {
+        throw new GeminiEmbeddingError("Die Embedding-Antwort hat ein ungültiges Format.", 502);
+      }
+      return [payload.embedding.values];
+    }
+
+    if (!isBatchEmbeddingResponse(payload) || payload.embeddings.length !== texts.length) {
+      throw new GeminiEmbeddingError("Die Batch-Embedding-Antwort hat ein ungültiges Format.", 502);
+    }
+    const vectors: number[][] = [];
+    for (const embedding of payload.embeddings) {
+      if (!isValidVector(embedding.values)) {
+        throw new GeminiEmbeddingError("Die Batch-Embedding-Antwort hat ein ungültiges Format.", 502);
+      }
+      vectors.push(embedding.values);
+    }
+    return vectors;
   }
 }
 

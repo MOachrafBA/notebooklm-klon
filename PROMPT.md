@@ -533,7 +533,7 @@ um zu verhindern, dass später versehentlich beide Modelle gemischt werden.
 
 ---
 
-## 2026-09-26 – Rate-Limit-Entlastung: Ingestion-Throttling + Duplikat-Erkennung (manuell, mit Claude)
+## 2026-09-26 – Rate-Limit-Entlastung: Ingestion-Throttling + Duplikat-Erkennung (manuell)
 
 **Ausgangslage:** Free-Tier-Kontingent für `gemini-embedding-2` wiederholt überschritten
 (Google-AI-Studio-Dashboard zeigte u. a. 107/100 für Embedding-2 und 30.76K/30K für ein
@@ -566,3 +566,66 @@ mehrere Dateien gleichzeitig hochgeladen, laufen ihre Embedding-Batches weiterhi
 könnten gemeinsam das Kontingent sprengen. Für den aktuellen Gebrauch (einzelne Uploads während
 einer Demo) ausreichend; bei echtem Mehrbenutzerbetrieb wäre eine projektweite Warteschlange
 nötig.
+
+---
+
+## 2026-09-27 – Zwei Produktionsfehler bei YouTube-Ingestion untersucht (manuell)
+
+**Fehler 1 – Production (Vercel): "Für dieses Video sind keine abrufbaren Untertitel verfügbar"**
+für ein Video, das nachweislich Untertitel hat.
+
+*Ursache (kein Code-Bug):* `youtube-transcript-plus` nutzt YouTubes inoffizielle Innertube-
+Schnittstelle. YouTube erkennt und blockiert Anfragen von Cloud-/Datacenter-IP-Bereichen
+(AWS, GCP, **Vercel**) systematisch und liefert dieselbe "keine Untertitel"-Antwort wie bei
+tatsächlich fehlenden Untertiteln – nicht unterscheidbar auf Protokollebene. Mehrfach
+unabhängig bestätigt (u. a. offizielle Fehlertypen wie `IpBlocked` in vergleichbaren Bibliotheken,
+mehrere Entwickler-Berichte mit identischem Symptom: funktioniert lokal, scheitert auf Vercel).
+Schon im ursprünglichen YouTube-Feature-Prompt als Risiko benannt ("kann brechen, wenn YouTube
+... Zugriffe begrenzt") – genau das ist eingetreten.
+
+*Entscheidung:* Als dokumentierte Produktionsgrenze festgehalten statt eines Feature-Fixes ohne
+echten Lösungsraum. Ein zuverlässiger Fix (Residential-Proxy oder bezahlter Managed-Transcript-
+Dienst) würde Kosten und neue Secrets bedeuten – bewusst zurückgestellt. YouTube-Ingestion
+funktioniert weiterhin zuverlässig lokal/in der Entwicklungsumgebung.
+
+**Fehler 2 – Dev: `POST /api/documents/ingest-youtube 504 in 66s`, "Zeitlimit von 60 Sekunden
+überschritten" bei Gemini-Embeddings** (echter Code-Bug, behoben)
+
+*Ursache:* Der `AbortController`-Timeout in `requestEmbeddings` (lib/rag/embeddings.ts) umschloss
+die gesamte Retry-Schleife statt jeden einzelnen Versuch. Bei Rate-Limit-Antworten (429) addieren
+sich Backoff-Wartezeiten (bis 30s, bis zu 3 Versuche) zur eigentlichen Netzwerkzeit – in Summe
+leicht über 60 Sekunden, wodurch der äußere Timeout durch die eigene Retry-Logik ausgelöst wurde,
+nicht durch eine tatsächlich langsame Gemini-Antwort.
+
+*Fix:* `AbortController` und Timeout werden jetzt pro Versuch neu erstellt statt einmal für die
+gesamte Schleife. Jeder einzelne Request bekommt sein volles 60-Sekunden-Fenster, Backoff-Pausen
+zwischen Versuchen zählen nicht mehr gegen dieses Fenster.
+
+*Nebenbei erledigt:* `app/api/documents/ingest-youtube/route.ts` fehlte `export const
+maxDuration = 60;` (die PDF/Text-Route hatte es bereits) – ergänzt für Konsistenz.
+
+---
+
+## 2026-09-27 – Prepaid-Billing aktiviert, 402-Fehlerbehandlung ergänzt (manuell)
+
+**Ausgangslage:** Trotz Content-Hash-Dedup und Batch-Throttling weiterhin Kontingent-Engpässe.
+Recherche ergab: Ein Google-AI-Pro-Abo (auch die Studenten-Variante) erhöht laut offizieller
+Google-Doku **nicht** das Kontingent der Gemini Developer API (`GEMINI_API_KEY`) – es gilt nur
+innerhalb der AI-Studio-Weboberfläche, der Gemini-App, Gemini CLI/Code Assist etc. Diese Abos
+sind ein komplett getrenntes System vom API-Kontingent.
+
+**Entscheidung:** Prepaid-Billing im Google-AI-Studio-Projekt aktiviert. Ergebnis: RPM 100 →
+3.000, TPM 30K → 1.000.000, RPD unlimitiert (jeweils für `gemini-embedding-2`). Aktueller
+Verbrauch liegt damit bei ca. 3–4 % Auslastung der neuen Limits. Embedding-Aufrufe sind pro
+Anfrage sehr günstig; das Aktivieren von Billing selbst schaltet höhere Rate-Limits frei,
+unabhängig vom tatsächlichen Verbrauch.
+
+**Neuer Fehlerfall dadurch aufgedeckt:** `402 Payment Required` – seit einem kürzlichen
+Google-API-Update der dedizierte Fehlercode für "Prepay-Guthaben aufgebraucht" (ersetzt in diesem
+Fall den bisherigen `429`). Bekannter, in Googles eigenem Entwickler-Forum mehrfach dokumentierter
+Sync-Bug: AI Studio kann ein Guthaben > 0 anzeigen, während die API dennoch 402 meldet – kein
+projektspezifischer Bug.
+
+**Code-Änderung:** `lib/rag/embeddings.ts` behandelt `402` jetzt explizit mit einer
+verständlichen Fehlermeldung (Verweis auf den Billing-Bereich in AI Studio) statt der generischen
+"fehlgeschlagen (402)"-Meldung, analog zur bereits vorhandenen `429`-Sonderbehandlung.
