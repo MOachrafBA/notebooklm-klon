@@ -4,6 +4,7 @@ import { buildPrompt } from "@/lib/rag/prompt";
 import { retrieveDocumentChunks } from "@/lib/rag/vectorStore";
 import type { ChatRequest } from "@/lib/rag/types";
 import { isDemoAccessAuthorized } from "@/lib/auth/demoAccess";
+import { getGeminiApiKey } from "@/lib/gemini/requestKey";
 
 export const maxDuration = 60;
 
@@ -29,6 +30,10 @@ export async function POST(request: Request): Promise<Response> {
   if (!isDemoAccessAuthorized(request)) {
     return Response.json({ error: "Bitte melde dich an, bevor du Fragen stellst." }, { status: 401 });
   }
+  const apiKey = getGeminiApiKey(request);
+  if (!apiKey) {
+    return Response.json({ error: "Gib zuerst deinen Gemini-API-Key ein." }, { status: 400 });
+  }
 
   let body: unknown;
   try {
@@ -42,10 +47,10 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   try {
-    const questionEmbedding = await embedQuestion(body.question);
+    const questionEmbedding = await embedQuestion(body.question, apiKey);
     const relevantChunks = await retrieveDocumentChunks(questionEmbedding, body.documentIds);
     const prompt = buildPrompt(body.question, relevantChunks);
-    const answer = await callLlm(prompt);
+    const answer = await callLlm(prompt, apiKey);
 
     return Response.json({ answer });
   } catch (error) {

@@ -653,3 +653,23 @@ Zeichen lang sein und bleibt ausschließlich in Server-Environment-Variablen.
 
 **Grenze:** Eine neue Chat-Anfrage braucht weiterhin ein Gemini-Embedding für die Frage sowie einen
 Gemini-Aufruf für die Antwort. Vorhandene gespeicherte Chunks ersetzen diese API-Aufrufe nicht.
+
+---
+
+## 2026-09-28 – Persönlichen Gemini-Key pro Besucher verwenden (manuell)
+
+**Anforderung:** Jeder Demo-Besucher verwendet seinen eigenen Gemini-API-Key; der Betreiber stellt
+keinen gemeinsamen Gemini-Key über Vercel bereit.
+
+**Änderungen:** Die UI hält den eingegebenen Key ausschließlich im flüchtigen React-State und
+übermittelt ihn bei Datei-/YouTube-Ingestion sowie Chat-Anfragen über den
+`x-gemini-api-key`-Header. Route Handler validieren den Header und reichen den Key an Embedding-
+und Generierungsoperationen weiter. Der Key wird nicht in Browser-Storage oder Supabase gespeichert
+und nicht durch Anwendungscode geloggt. Die öffentliche Dokumentation erklärt, dass Requests über
+den App-Server zu Google weitergeleitet werden und Kosten/Kontingente dem Inhaber des Keys
+zugeordnet sind. Ein Neuladen löscht den Key aus dem UI-State; Besucher müssen ihn erneut eingeben.
+
+**Konfiguration:** `GEMINI_API_KEY` wird nicht länger in Vercel benötigt. `GEMINI_MODEL`,
+Supabase-Variablen und das gemeinsame `SOURCE_ACCESS_PASSWORD` bleiben serverseitige
+Konfigurationen. Das gemeinsame Demo-Passwort schützt weiterhin den geteilten Quellenbestand;
+es stellt keine individuelle Nutzertrennung bereit.

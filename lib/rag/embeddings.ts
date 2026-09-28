@@ -42,6 +42,7 @@ export class GeminiEmbeddingError extends Error {
 }
 
 export function getGeminiEmbeddingHttpStatus(error: GeminiEmbeddingError): number {
+  if (error.statusCode === 401 || error.statusCode === 403) return error.statusCode;
   if (error.statusCode === 429 || error.statusCode === 503) return 503;
   if (error.statusCode === 504) return 504;
   if (error.statusCode === 402) return 402;
@@ -69,14 +70,6 @@ function formatDocumentText(documentName: string, text: string): string {
 
 function formatQuestionText(question: string): string {
   return `task: question answering | query: ${question}`;
-}
-
-function getApiKey(): string {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    throw new GeminiEmbeddingError("GEMINI_API_KEY ist nicht konfiguriert.", 503);
-  }
-  return apiKey;
 }
 
 function getEmbeddingModel(): EmbeddingModel {
@@ -205,6 +198,12 @@ async function requestEmbeddings(
           402,
         );
       }
+      if (response.status === 401 || response.status === 403) {
+        throw new GeminiEmbeddingError(
+          "Der Gemini-API-Key ist ungültig oder hat keinen Zugriff auf das Embedding-Modell.",
+          response.status,
+        );
+      }
       throw new GeminiEmbeddingError(
         `Die Gemini-Embedding-Anfrage ist fehlgeschlagen (${response.status}).`,
         response.status >= 500 ? 502 : response.status,
@@ -236,19 +235,25 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function requestEmbedding(text: string): Promise<number[]> {
-  const [embedding] = await requestEmbeddings([text], getApiKey());
+async function requestEmbedding(text: string, apiKey: string): Promise<number[]> {
+  const [embedding] = await requestEmbeddings([text], apiKey);
   return embedding;
 }
 
-export function embedDocumentChunk(documentName: string, text: string): Promise<number[]> {
-  return requestEmbedding(formatDocumentText(documentName, text));
+export function embedDocumentChunk(
+  documentName: string,
+  text: string,
+  apiKey: string,
+): Promise<number[]> {
+  return requestEmbedding(formatDocumentText(documentName, text), apiKey);
 }
 
-export async function embedDocumentChunks(inputs: EmbeddingInput[]): Promise<number[][]> {
+export async function embedDocumentChunks(
+  inputs: EmbeddingInput[],
+  apiKey: string,
+): Promise<number[][]> {
   if (inputs.length === 0) return [];
 
-  const apiKey = getApiKey();
   const texts = inputs.map(({ documentName, text }) => formatDocumentText(documentName, text));
   const embeddings: number[][] = [];
 
@@ -263,6 +268,6 @@ export async function embedDocumentChunks(inputs: EmbeddingInput[]): Promise<num
   return embeddings;
 }
 
-export function embedQuestion(question: string): Promise<number[]> {
-  return requestEmbedding(formatQuestionText(question));
+export function embedQuestion(question: string, apiKey: string): Promise<number[]> {
+  return requestEmbedding(formatQuestionText(question), apiKey);
 }

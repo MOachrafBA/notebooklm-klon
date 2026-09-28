@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
+import { GEMINI_API_KEY_HEADER } from "@/lib/gemini/requestKey";
 import type { ChatMessage, ChatResponse, DocumentSource } from "@/lib/rag/types";
 
 const CHAT_ENDPOINT = "/api/chat";
@@ -9,13 +10,14 @@ const REQUEST_ERROR_MESSAGE = "Die Anfrage konnte nicht verarbeitet werden.";
 
 interface ChatPanelProps {
   sources: DocumentSource[];
+  geminiApiKey: string;
 }
 
 function createMessage(role: ChatMessage["role"], content: string): ChatMessage {
   return { id: crypto.randomUUID(), role, content };
 }
 
-export function ChatPanel({ sources }: ChatPanelProps) {
+export function ChatPanel({ sources, geminiApiKey }: ChatPanelProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [question, setQuestion] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -23,7 +25,7 @@ export function ChatPanel({ sources }: ChatPanelProps) {
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const trimmedQuestion = question.trim();
-    if (!trimmedQuestion || sources.length === 0 || isLoading) {
+    if (!trimmedQuestion || sources.length === 0 || !geminiApiKey.trim() || isLoading) {
       return;
     }
 
@@ -34,7 +36,10 @@ export function ChatPanel({ sources }: ChatPanelProps) {
     try {
       const response = await fetch(CHAT_ENDPOINT, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          [GEMINI_API_KEY_HEADER]: geminiApiKey.trim(),
+        },
         body: JSON.stringify({
           question: trimmedQuestion,
           documentIds: sources.map((source) => source.id),
@@ -98,14 +103,20 @@ export function ChatPanel({ sources }: ChatPanelProps) {
           <textarea
             value={question}
             onChange={(event) => setQuestion(event.target.value)}
-            placeholder={sources.length > 0 ? "Stelle eine Frage zu deinen Quellen …" : "Füge zuerst eine Quelle hinzu …"}
-            disabled={sources.length === 0 || isLoading}
+            placeholder={
+              !geminiApiKey.trim()
+                ? "Gib zuerst deinen Gemini API-Key in der Quellenleiste ein …"
+                : sources.length > 0
+                  ? "Stelle eine Frage zu deinen Quellen …"
+                  : "Füge zuerst eine Quelle hinzu …"
+            }
+            disabled={sources.length === 0 || !geminiApiKey.trim() || isLoading}
             rows={1}
             className="min-h-11 flex-1 resize-none bg-transparent px-3 py-3 text-sm text-slate-800 outline-none placeholder:text-slate-400 disabled:cursor-not-allowed"
           />
           <button
             type="submit"
-            disabled={!question.trim() || sources.length === 0 || isLoading}
+            disabled={!question.trim() || sources.length === 0 || !geminiApiKey.trim() || isLoading}
             className="rounded-xl bg-indigo-600 px-4 py-3 text-sm font-medium text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"
           >
             Senden

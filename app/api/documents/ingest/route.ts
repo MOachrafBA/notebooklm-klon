@@ -10,6 +10,7 @@ import {
 import { findDocumentIdByContentHash, saveDocumentChunks } from "@/lib/rag/vectorStore";
 import { DOCUMENT_TYPES, type DocumentSource } from "@/lib/rag/types";
 import { isDemoAccessAuthorized } from "@/lib/auth/demoAccess";
+import { getGeminiApiKey } from "@/lib/gemini/requestKey";
 
 export const maxDuration = 60;
 export const runtime = "nodejs";
@@ -54,6 +55,10 @@ export async function POST(request: Request): Promise<Response> {
   if (!isDemoAccessAuthorized(request)) {
     return Response.json({ error: "Bitte melde dich an, bevor du eine Quelle hinzufügst." }, { status: 401 });
   }
+  const apiKey = getGeminiApiKey(request);
+  if (!apiKey) {
+    return Response.json({ error: "Gib zuerst deinen Gemini-API-Key ein." }, { status: 400 });
+  }
 
   let formData: FormData;
   try {
@@ -93,6 +98,7 @@ export async function POST(request: Request): Promise<Response> {
     const chunks = chunkDocument(document);
     const embeddings = await embedDocumentChunks(
       chunks.map((chunk) => ({ documentName: chunk.documentName, text: chunk.text })),
+      apiKey,
     );
     await saveDocumentChunks(chunks, embeddings, contentHash);
 

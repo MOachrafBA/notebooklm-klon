@@ -8,6 +8,7 @@ import {
 } from "@/lib/rag/embeddings";
 import { saveDocumentChunks } from "@/lib/rag/vectorStore";
 import { isDemoAccessAuthorized } from "@/lib/auth/demoAccess";
+import { getGeminiApiKey } from "@/lib/gemini/requestKey";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -23,6 +24,10 @@ function isRequestBody(value: unknown): value is { url: string } {
 export async function POST(request: Request): Promise<Response> {
   if (!isDemoAccessAuthorized(request)) {
     return Response.json({ error: "Bitte melde dich an, bevor du eine Quelle hinzufügst." }, { status: 401 });
+  }
+  const apiKey = getGeminiApiKey(request);
+  if (!apiKey) {
+    return Response.json({ error: "Gib zuerst deinen Gemini-API-Key ein." }, { status: 400 });
   }
 
   let body: unknown;
@@ -53,6 +58,7 @@ export async function POST(request: Request): Promise<Response> {
     );
     const embeddings = await embedDocumentChunks(
       chunks.map((chunk) => ({ documentName: chunk.documentName, text: chunk.text })),
+      apiKey,
     );
     await saveDocumentChunks(chunks, embeddings);
 

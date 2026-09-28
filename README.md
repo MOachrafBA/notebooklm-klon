@@ -88,11 +88,17 @@ App läuft danach unter [http://localhost:3000](http://localhost:3000).
 
 | Variable | Pflicht | Beschreibung |
 |---|---|---|
-| `GEMINI_API_KEY` | ja | API-Key für die Google Gemini API |
-| `GEMINI_MODEL` | nein | Standard: `gemini-flash-lite-latest` |
+| `GEMINI_MODEL` | nein | Serverseitige Modellwahl, Standard: `gemini-flash-lite-latest` |
 | `SUPABASE_URL` | ja | URL des Supabase-Projekts |
 | `SUPABASE_SERVICE_ROLE_KEY` | ja | Server-only Supabase-Key, niemals im Browser verwenden |
 | `SOURCE_ACCESS_PASSWORD` | ja | Gemeinsames Demo-Passwort (mindestens 32 Zeichen); schützt Quellen und API-Routen, kein separates Nutzerkonto |
+
+Jeder Besucher gibt seinen eigenen Gemini-API-Key in der App ein. Der Key wird nur im
+Arbeitsspeicher des Browsers gehalten und pro Gemini-Anfrage über HTTPS an den App-Server
+übermittelt; er wird weder in Supabase gespeichert noch von der Anwendung protokolliert. Der
+Server leitet ihn für Embedding- und Generierungsaufrufe an Google weiter. Gemini-Nutzung und
+Kosten werden dem Google-Konto des jeweiligen Key-Inhabers zugerechnet. Nach einem Neuladen muss
+der Key erneut eingegeben werden. Zum Erstellen eines Keys: https://aistudio.google.com/apikey
 
 Die öffentliche Demo ist durch ein gemeinsames Passwort geschützt. Verwende einen zufälligen Wert
 mit mindestens 32 Zeichen und hinterlege ihn ausschließlich als serverseitige Umgebungsvariable
@@ -133,18 +139,17 @@ ausführen. Das Schema aktiviert `pgvector`, erstellt die Chunk-Tabelle und die
 Retrieval-RPC-Funktion. Die Embedding-Spalte ist auf `vector(3072)` gesetzt, passend zur
 aktuell verwendeten Ausgabe von `gemini-embedding-2`.
 
-**Billing-Hinweis:** Der kostenlose Gemini-Developer-API-Tier reicht für wiederholtes Testen
-nicht aus (niedrige RPM/TPM-Limits). Ein Google-AI-Pro-Abo (auch Studenten-Variante) hilft hier
-**nicht** – dessen Vorteile gelten laut Google nur innerhalb der AI-Studio-Weboberfläche, nicht
-für direkte API-Aufrufe. Dieses Projekt nutzt daher Prepaid-Billing im Google-AI-Studio-Projekt
-(niedrige Kosten pro Embedding-Aufruf, deutlich höhere Rate-Limits). Siehe `PROMPT.md` für
-Details und einen bekannten `402`-Fehlerfall bei aufgebrauchtem/nicht synchronisiertem Guthaben.
+**Billing-Hinweis:** Die Gemini API-Nutzung läuft über den persönlichen Key des jeweiligen
+Besuchers. Ein Google-AI-Pro-Abo (auch Studenten-Variante) ist nicht automatisch dasselbe wie
+Gemini Developer API-Billing. Besucher sollten die API-Billing- und Kontingentbedingungen ihres
+Google-Projekts prüfen; `402`-/`429`-Fehler werden mit einer passenden Meldung angezeigt.
 Bereits gespeicherte Quellen können auch ohne ein neues Ingest wieder in der Quellenliste erscheinen.
 Eine neue Frage benötigt jedoch weiterhin ein Gemini-Embedding und einen Gemini-LLM-Aufruf; gespeicherte
 Chunks allein ermöglichen daher keine neue Antwort, wenn der API-Zugriff nicht verfügbar ist.
 
 Für Vercel müssen dieselben Umgebungsvariablen in den Project Settings unter **Environment
-Variables** hinterlegt werden. `SUPABASE_SERVICE_ROLE_KEY` darf ausschließlich als
+Variables** hinterlegt werden. Ein `GEMINI_API_KEY` ist kein Vercel-Environment-Wert, weil Besucher
+ihren eigenen Key in der App bereitstellen. `SUPABASE_SERVICE_ROLE_KEY` darf ausschließlich als
 serverseitige Variable verwendet werden und darf weder in Client-Code noch in eine
 `NEXT_PUBLIC_*`-Variable gelangen. Nach dem Setzen der Variablen kann Vercel den Build und
 die dynamischen API-Routen (`/api/documents/ingest`, `/api/documents/ingest-youtube`,

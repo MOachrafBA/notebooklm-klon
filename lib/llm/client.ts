@@ -28,12 +28,7 @@ function isGeminiResponse(value: unknown): value is GeminiResponse {
   return response.candidates === undefined || Array.isArray(response.candidates);
 }
 
-export async function callLlm(prompt: string): Promise<string> {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    throw new Error("GEMINI_API_KEY ist nicht konfiguriert.");
-  }
-
+export async function callLlm(prompt: string, apiKey: string): Promise<string> {
   const model = process.env.GEMINI_MODEL ?? DEFAULT_MODEL;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
@@ -64,6 +59,12 @@ export async function callLlm(prompt: string): Promise<string> {
 
     if (!response.ok) {
       const errorText = await response.text();
+      if (response.status === 401 || response.status === 403) {
+        throw new Error("Der Gemini-API-Key ist ungültig oder hat keinen Zugriff auf dieses Modell.");
+      }
+      if (response.status === 402 || response.status === 429) {
+        throw new Error("Das Gemini-Kontingent oder Guthaben für diesen API-Key ist ausgeschöpft.");
+      }
       throw new Error(`LLM-Anfrage fehlgeschlagen (${response.status}): ${errorText}`);
     }
 
