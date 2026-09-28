@@ -1,4 +1,4 @@
-import { callLlm } from "@/lib/llm/client";
+import { callLlm, GeminiLlmError } from "@/lib/llm/client";
 import { embedQuestion } from "@/lib/rag/embeddings";
 import { buildPrompt } from "@/lib/rag/prompt";
 import { retrieveDocumentChunks } from "@/lib/rag/vectorStore";
@@ -56,6 +56,9 @@ export async function POST(request: Request): Promise<Response> {
   } catch (error) {
     const message = error instanceof Error ? error.message : SERVER_ERROR_MESSAGE;
     console.error("Chat request failed:", message);
-    return Response.json({ error: message }, { status: 500 });
+    return Response.json(
+      { error: message },
+      { status: error instanceof GeminiLlmError ? error.statusCode : 500 },
+    );
   }
 }

@@ -673,3 +673,17 @@ zugeordnet sind. Ein Neuladen löscht den Key aus dem UI-State; Besucher müssen
 Supabase-Variablen und das gemeinsame `SOURCE_ACCESS_PASSWORD` bleiben serverseitige
 Konfigurationen. Das gemeinsame Demo-Passwort schützt weiterhin den geteilten Quellenbestand;
 es stellt keine individuelle Nutzertrennung bereit.
+
+---
+
+## 2026-09-28 – Gemini-503 bei hoher Modellauslastung behandeln (manuell)
+
+**Ausgangslage:** Gemini `generateContent` lieferte zeitweise `503 UNAVAILABLE` mit der Meldung,
+dass das Modell stark ausgelastet sei. Das ist ein temporärer Providerfehler und belegt keinen
+ungültigen API-Key.
+
+**Änderungen:** Die LLM-Integration wiederholt eine `503`-Antwort einmal nach kurzer Pause; jeder
+Versuch hat ein eigenes 20-Sekunden-Timeout. Bleibt der Provider ausgelastet, liefert die API
+Status `503` und eine verständliche, nicht an Provider-Interna gekoppelte Meldung an die UI. Andere
+Fehlerklassen wie ungültiger Key (`401`/`403`) und Kontingent/Billing (`402`/`429`) bleiben
+unterschieden. Automatisierte Tests decken erfolgreichen Retry und ausgeschöpfte Wiederholung ab.

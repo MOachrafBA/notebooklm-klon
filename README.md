@@ -99,6 +99,9 @@ Arbeitsspeicher des Browsers gehalten und pro Gemini-Anfrage über HTTPS an den 
 Server leitet ihn für Embedding- und Generierungsaufrufe an Google weiter. Gemini-Nutzung und
 Kosten werden dem Google-Konto des jeweiligen Key-Inhabers zugerechnet. Nach einem Neuladen muss
 der Key erneut eingegeben werden. Zum Erstellen eines Keys: https://aistudio.google.com/apikey
+Bei vorübergehender Gemini-Überlastung (`503`) wird die Generierungsanfrage einmal automatisch
+wiederholt; bleibt das Modell nicht verfügbar, erhält der Besucher eine verständliche Meldung und
+kann es später erneut versuchen.
 
 Die öffentliche Demo ist durch ein gemeinsames Passwort geschützt. Verwende einen zufälligen Wert
 mit mindestens 32 Zeichen und hinterlege ihn ausschließlich als serverseitige Umgebungsvariable
