@@ -2,7 +2,7 @@ import { SYSTEM_INSTRUCTION } from "@/lib/rag/prompt";
 
 const GEMINI_API_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models";
 const DEFAULT_MODEL = "gemini-3.5-flash-lite";
-const FALLBACK_MODEL = "gemini-2.5-flash-lite";
+const FALLBACK_MODEL = "gemini-2.5-flash";
 const REQUEST_TIMEOUT_MS = 60_000;
 const MAX_UNAVAILABLE_RETRIES = 1;
 const UNAVAILABLE_RETRY_DELAY_MS = 1_000;
@@ -42,8 +42,9 @@ function isGeminiResponse(value: unknown): value is GeminiResponse {
 }
 
 export async function callLlm(prompt: string, apiKey: string): Promise<string> {
+  const configuredModel = process.env.GEMINI_MODEL?.trim().replace(/^models\//, "");
   const models = Array.from(
-    new Set([process.env.GEMINI_MODEL ?? DEFAULT_MODEL, FALLBACK_MODEL]),
+    new Set([configuredModel || DEFAULT_MODEL, FALLBACK_MODEL]),
   );
 
   for (const [modelIndex, model] of models.entries()) {
@@ -96,7 +97,7 @@ export async function callLlm(prompt: string, apiKey: string): Promise<string> {
             break;
           }
           throw new GeminiLlmError(
-            "Das konfigurierte Gemini-Modell wurde nicht gefunden. Prüfe GEMINI_MODEL und ob der API-Key Zugriff auf dieses Modell hat.",
+            `Auch das Gemini-Ausweichmodell "${model}" wurde nicht gefunden. Prüfe, ob die Gemini API aktiviert ist und dein API-Key Zugriff auf dieses Modell hat.`,
             404,
           );
         }

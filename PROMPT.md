@@ -704,9 +704,9 @@ dieselbe Modell-ID. Ein gesetztes `GEMINI_MODEL` überschreibt den Code-Default 
 Modellaufruf bereits einmal wiederholt wurde.
 
 **Änderung:** `lib/llm/client.ts` versucht nach einem weiteren `503` automatisch
-`gemini-2.5-flash-lite`. Der konfigurierte `GEMINI_MODEL`-Wert bleibt das bevorzugte Modell.
-Bei einem `404` für das bevorzugte Modell wird ebenfalls auf `gemini-2.5-flash-lite` ausgewichen.
+`gemini-2.5-flash`. Der konfigurierte `GEMINI_MODEL`-Wert bleibt das bevorzugte Modell.
+Bei einem `404` für das bevorzugte Modell wird ebenfalls auf `gemini-2.5-flash` ausgewichen.
 Die Ausweichanfrage nutzt denselben vom Besucher bereitgestellten API-Key; andere Fehler wie
 ungültige Schlüssel oder aufgebrauchte Kontingente lösen keinen Modellwechsel aus. Tests prüfen
 Fallback-Erfolg nach `503` beziehungsweise `404` und den Fehlerfall, wenn beide Modelle ausgelastet
-sind.
+sind. Ein Modellwert mit optionalem `models/`-Präfix wird vor dem API-Aufruf normalisiert.

@@ -52,7 +52,7 @@ test("retries a temporary Gemini 503 once before returning the answer", async ()
   }
 });
 
-test("falls back to Gemini 2.5 Flash-Lite after the primary model stays unavailable", async () => {
+test("falls back to Gemini 2.5 Flash after the primary model stays unavailable", async () => {
   const originalFetch = globalThis.fetch;
   const originalModel = process.env.GEMINI_MODEL;
   const requestedModels: string[] = [];
@@ -60,7 +60,7 @@ test("falls back to Gemini 2.5 Flash-Lite after the primary model stays unavaila
   globalThis.fetch = async (input) => {
     const url = String(input);
     requestedModels.push(url);
-    if (url.includes("/gemini-2.5-flash-lite:")) {
+    if (url.includes("/gemini-2.5-flash:")) {
       return Response.json({
         candidates: [{ content: { parts: [{ text: "Antwort aus dem Fallback." }] } }],
       });
@@ -74,7 +74,7 @@ test("falls back to Gemini 2.5 Flash-Lite after the primary model stays unavaila
     assert.equal(requestedModels.length, 3);
     assert.ok(requestedModels[0].includes("/gemini-3.5-flash-lite:"));
     assert.ok(requestedModels[1].includes("/gemini-3.5-flash-lite:"));
-    assert.ok(requestedModels[2].includes("/gemini-2.5-flash-lite:"));
+    assert.ok(requestedModels[2].includes("/gemini-2.5-flash:"));
   } finally {
     globalThis.fetch = originalFetch;
     if (originalModel === undefined) {
@@ -85,7 +85,7 @@ test("falls back to Gemini 2.5 Flash-Lite after the primary model stays unavaila
   }
 });
 
-test("falls back to Gemini 2.5 Flash-Lite when the primary model returns 404", async () => {
+test("falls back to Gemini 2.5 Flash when the primary model returns 404", async () => {
   const originalFetch = globalThis.fetch;
   const originalModel = process.env.GEMINI_MODEL;
   const requestedModels: string[] = [];
@@ -93,7 +93,7 @@ test("falls back to Gemini 2.5 Flash-Lite when the primary model returns 404", a
   globalThis.fetch = async (input) => {
     const url = String(input);
     requestedModels.push(url);
-    if (url.includes("/gemini-2.5-flash-lite:")) {
+    if (url.includes("/gemini-2.5-flash:")) {
       return Response.json({
         candidates: [{ content: { parts: [{ text: "Antwort aus dem Fallback." }] } }],
       });
@@ -106,7 +106,7 @@ test("falls back to Gemini 2.5 Flash-Lite when the primary model returns 404", a
     assert.equal(answer, "Antwort aus dem Fallback.");
     assert.equal(requestedModels.length, 2);
     assert.ok(requestedModels[0].includes("/gemini-3.5-flash-lite:"));
-    assert.ok(requestedModels[1].includes("/gemini-2.5-flash-lite:"));
+    assert.ok(requestedModels[1].includes("/gemini-2.5-flash:"));
   } finally {
     globalThis.fetch = originalFetch;
     if (originalModel === undefined) {
