@@ -1,25 +1,31 @@
 import { SYSTEM_INSTRUCTION } from "@/lib/rag/prompt";
 
-const GEMINI_API_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models";
-const DEFAULT_MODEL = "gemini-3.5-flash-lite";
-const FALLBACK_MODEL = "gemini-2.5-flash";
+const GEMINI_INTERACTIONS_URL = "https://generativelanguage.googleapis.com/v1beta/interactions";
+const DEFAULT_MODEL = "gemini-3.8-flash";
+const FALLBACK_MODEL = "gemini-3.7-flash";
 const REQUEST_TIMEOUT_MS = 60_000;
 const MAX_UNAVAILABLE_RETRIES = 1;
 const UNAVAILABLE_RETRY_DELAY_MS = 1_000;
 const GENERATION_TEMPERATURE = 0.2;
 
-interface GeminiPart {
+interface GeminiOutputContent {
+  type?: string;
   text?: string;
 }
 
-interface GeminiCandidate {
-  content?: {
-    parts?: GeminiPart[];
-  };
+interface GeminiStep {
+  type?: string;
+  content?: GeminiOutputContent[];
 }
 
-interface GeminiResponse {
-  candidates?: GeminiCandidate[];
+interface GeminiInteractionResponse {
+  steps?: GeminiStep[];
+}
+
+interface GeminiErrorResponse {
+  error?: {
+    message?: unknown;
+  };
 }
 
 export class GeminiLlmError extends Error {
@@ -32,17 +38,33 @@ export class GeminiLlmError extends Error {
   }
 }
 
-function isGeminiResponse(value: unknown): value is GeminiResponse {
+function isGeminiInteractionResponse(value: unknown): value is GeminiInteractionResponse {
   if (typeof value !== "object" || value === null) {
     return false;
   }
 
-  const response = value as { candidates?: unknown };
-  return response.candidates === undefined || Array.isArray(response.candidates);
+  const response = value as { steps?: unknown };
+  return Array.isArray(response.steps);
+}
+
+function getProviderErrorMessage(value: unknown): string | null {
+  if (typeof value !== "object" || value === null || !("error" in value)) {
+    return null;
+  }
+
+  const error = (value as GeminiErrorResponse).error;
+  if (typeof error?.message !== "string") {
+    return null;
+  }
+
+  return error.message.slice(0, 300);
 }
 
 export async function callLlm(prompt: string, apiKey: string): Promise<string> {
-  const configuredModel = process.env.GEMINI_MODEL?.trim().replace(/^models\//, "");
+  const configuredModel = process.env.GEMINI_MODEL
+    ?.trim()
+    .replace(/^(?:GEMINI_MODEL=)+/i, "")
+    .replace(/^models\//, "");
   const models = Array.from(
     new Set([configuredModel || DEFAULT_MODEL, FALLBACK_MODEL]),
   );
@@ -53,25 +75,18 @@ export async function callLlm(prompt: string, apiKey: string): Promise<string> {
       const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
       try {
-        const response = await fetch(`${GEMINI_API_BASE_URL}/${model}:generateContent`, {
+        const response = await fetch(GEMINI_INTERACTIONS_URL, {
           method: "POST",
           headers: {
             "x-goog-api-key": apiKey,
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            systemInstruction: {
-              parts: [{ text: SYSTEM_INSTRUCTION }],
-            },
-            contents: [
-              {
-                role: "user",
-                parts: [{ text: prompt }],
-              },
-            ],
-            generationConfig: {
-              temperature: GENERATION_TEMPERATURE,
-            },
+            model,
+            input: prompt,
+            system_instruction: SYSTEM_INSTRUCTION,
+            generation_config: { temperature: GENERATION_TEMPERATURE },
+            store: false,
           }),
           signal: controller.signal,
         });
@@ -92,17 +107,19 @@ export async function callLlm(prompt: string, apiKey: string): Promise<string> {
         }
 
         if (response.status === 404) {
-          await response.text();
+          const payload: unknown = await response.json().catch(() => null);
           if (modelIndex < models.length - 1) {
             break;
           }
+          const providerMessage = getProviderErrorMessage(payload);
           throw new GeminiLlmError(
-            `Auch das Gemini-Ausweichmodell "${model}" wurde nicht gefunden. Prüfe, ob die Gemini API aktiviert ist und dein API-Key Zugriff auf dieses Modell hat.`,
+            `Gemini kann das Modell "${model}" über die Interactions API nicht verwenden.${providerMessage ? ` Google meldet: ${providerMessage}` : " Prüfe, ob die Modell-ID existiert und für die Interactions API verfügbar ist."}`,
             404,
           );
         }
 
         if (!response.ok) {
+          const payload: unknown = await response.json().catch(() => null);
           if (response.status === 401 || response.status === 403) {
             throw new GeminiLlmError(
               "Der Gemini-API-Key ist ungültig oder hat keinen Zugriff auf dieses Modell.",
@@ -116,17 +133,23 @@ export async function callLlm(prompt: string, apiKey: string): Promise<string> {
             );
           }
           throw new GeminiLlmError(
-            `Die Gemini-Anfrage ist fehlgeschlagen (${response.status}). Bitte versuche es später erneut.`,
+            `Die Gemini-Anfrage ist fehlgeschlagen (${response.status}).${getProviderErrorMessage(payload) ? ` Google meldet: ${getProviderErrorMessage(payload)}` : " Bitte prüfe Modell, API-Key und Request-Konfiguration."}`,
             response.status,
           );
         }
 
         const payload: unknown = await response.json();
-        if (!isGeminiResponse(payload)) {
+        if (!isGeminiInteractionResponse(payload)) {
           throw new GeminiLlmError("Die LLM-Antwort hat ein ungültiges Format.", 502);
         }
 
-        const answer = payload.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+        const answer = payload.steps
+          ?.filter((step) => step.type === "model_output")
+          .flatMap((step) => step.content ?? [])
+          .filter((content) => content.type === "text")
+          .map((content) => content.text ?? "")
+          .join("")
+          .trim();
         if (!answer) {
           throw new GeminiLlmError("Die LLM-Antwort enthält keinen Text.", 502);
         }

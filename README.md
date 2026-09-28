@@ -36,8 +36,8 @@ erfundenen Fakten. Genau darauf liegt der Fokus dieses Klons.
 
 - **Framework:** Next.js 16 (App Router, TypeScript)
 - **Styling:** Tailwind CSS 4
-- **LLM:** Google Gemini API (`gemini-3.5-flash-lite` als Default, über `GEMINI_MODEL`
-  konfigurierbar)
+- **LLM:** Google Gemini Interactions API (`gemini-3.8-flash` als Default, über `GEMINI_MODEL`
+  konfigurierbar; `gemini-3.7-flash` als Fallback)
 - **RAG-Ansatz:** Dokumente werden serverseitig gechunkt, mit dem Gemini-Embedding-Modell
   `gemini-embedding-2` vektorisiert und in Supabase Vector (Postgres/pgvector) gespeichert.
   Fragen werden ebenfalls eingebettet; relevante Abschnitte kommen über eine Supabase-RPC-Funktion
@@ -88,7 +88,7 @@ App läuft danach unter [http://localhost:3000](http://localhost:3000).
 
 | Variable | Pflicht | Beschreibung |
 |---|---|---|
-| `GEMINI_MODEL` | nein | Serverseitige Modellwahl, Standard: `gemini-3.5-flash-lite` |
+| `GEMINI_MODEL` | nein | Serverseitige Modellwahl, Standard: `gemini-3.8-flash`; nur die Modell-ID eintragen, ohne `GEMINI_MODEL=` |
 | `SUPABASE_URL` | ja | URL des Supabase-Projekts |
 | `SUPABASE_SERVICE_ROLE_KEY` | ja | Server-only Supabase-Key, niemals im Browser verwenden |
 | `SOURCE_ACCESS_PASSWORD` | ja | Gemeinsames Demo-Passwort (mindestens 32 Zeichen); schützt Quellen und API-Routen, kein separates Nutzerkonto |
@@ -99,12 +99,12 @@ Arbeitsspeicher des Browsers gehalten und pro Gemini-Anfrage über HTTPS an den 
 Server leitet ihn für Embedding- und Generierungsaufrufe an Google weiter. Gemini-Nutzung und
 Kosten werden dem Google-Konto des jeweiligen Key-Inhabers zugerechnet. Nach einem Neuladen muss
 der Key erneut eingegeben werden. Zum Erstellen eines Keys: https://aistudio.google.com/apikey
-Bei vorübergehender Gemini-Überlastung (`503`) wird die Generierungsanfrage einmal automatisch
-wiederholt. Bleibt das konfigurierte Modell nicht verfügbar, wechselt die Anwendung automatisch
-zu `gemini-2.5-flash`. Bei einem nicht verfügbaren Modell (`404`) wird ebenfalls dieses
-Ausweichmodell versucht. Beide Aufrufe verwenden den vom Besucher eingegebenen API-Key. Sind auch
-die Ausweichversuche erfolglos, erhält der Besucher eine verständliche Meldung mit dem betroffenen
-Modell.
+Die Antwort wird über die Gemini Interactions API erzeugt. Anfragen setzen `store=false`, damit
+Frage und Dokumentkontext nicht als Interaction gespeichert werden. Bei vorübergehender
+Überlastung (`503`) wird die Anfrage einmal wiederholt; wenn das konfigurierte Modell einen
+`404` liefert oder nach dem Retry weiter überlastet ist, wechselt die Anwendung zu
+`gemini-3.7-flash`. Beide Aufrufe verwenden den vom Besucher eingegebenen API-Key. Bei weiteren
+Fehlern gibt die Anwendung, sofern vorhanden, die konkrete Providerdiagnose zurück.
 
 Die öffentliche Demo ist durch ein gemeinsames Passwort geschützt. Verwende einen zufälligen Wert
 mit mindestens 32 Zeichen und hinterlege ihn ausschließlich als serverseitige Umgebungsvariable

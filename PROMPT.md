@@ -698,6 +698,31 @@ dieselbe Modell-ID. Ein gesetztes `GEMINI_MODEL` überschreibt den Code-Default 
 
 ---
 
+## 2026-09-28 – GEMINI_MODEL-Konfiguration robust normalisieren (manuell)
+
+**Ausgangslage:** Der lokale `.env`-Eintrag enthielt versehentlich den Variablennamen auch im
+Variablenwert (`GEMINI_MODEL=GEMINI_MODEL=...`). Dadurch wurde der fehlerhafte Wert als Teil des
+Modellpfads an Gemini gesendet und die API antwortete mit HTTP 400.
+
+**Änderung:** Der lokale Eintrag wurde auf `GEMINI_MODEL=gemini-2.5-flash` korrigiert.
+`lib/llm/client.ts` entfernt zusätzlich versehentlich mitkopierte `GEMINI_MODEL=`- und
+`models/`-Präfixe vor dem Request. Ein Test deckt diese Normalisierung ab; die README weist
+darauf hin, dass als Variablenwert ausschließlich die Modell-ID eingetragen wird.
+
+---
+
+## 2026-09-28 – Gemini-404-Diagnose präzisieren (manuell)
+
+**Ausgangslage:** Gemini meldete für die Generierung HTTP 404; die bisherige Anwendung ersetzte
+die Providerdiagnose durch einen generischen Hinweis zum Modell.
+
+**Änderung:** Bei einem endgültigen `404` wird die Modell-ID genannt und die begrenzte
+`error.message`-Diagnose der Gemini API an die UI weitergegeben. Der API-Key wird dabei nicht
+protokolliert oder in die Meldung aufgenommen. Ein Test prüft die Diagnose und stellt sicher, dass
+der API-Key nicht in der Fehlermeldung erscheint.
+
+---
+
 ## 2026-09-28 – Fallback bei anhaltender Gemini-503-Überlastung (manuell)
 
 **Ausgangslage:** Die Chat-Anfragen erhielten wiederholt `503 UNAVAILABLE`, obwohl der primäre
@@ -710,3 +735,17 @@ Die Ausweichanfrage nutzt denselben vom Besucher bereitgestellten API-Key; ander
 ungültige Schlüssel oder aufgebrauchte Kontingente lösen keinen Modellwechsel aus. Tests prüfen
 Fallback-Erfolg nach `503` beziehungsweise `404` und den Fehlerfall, wenn beide Modelle ausgelastet
 sind. Ein Modellwert mit optionalem `models/`-Präfix wird vor dem API-Aufruf normalisiert.
+
+---
+
+## 2026-09-28 – Gemini 3.8 über die Interactions API verwenden (manuell)
+
+**Ausgangslage:** Google meldete, dass `gemini-2.5-flash` für neue Nutzer nicht verfügbar sei und
+empfahl `gemini-3.8-flash`. Die aktuelle Gemini-Dokumentation empfiehlt für neue Modelle die
+Interactions API.
+
+**Änderungen:** `lib/llm/client.ts` verwendet jetzt `POST /v1beta/interactions` mit
+`gemini-3.8-flash` als Default und `gemini-3.7-flash` als Fallback. Die Interactions werden mit
+`store: false` nicht serverseitig gespeichert. Die Antwort wird aus den `model_output`-Schritten
+extrahiert. `.env.example`, README und lokale `.env` wurden aktualisiert; Tests decken das neue
+Request-/Response-Format, Retries, Fallback und Fehlerdiagnosen ab.
