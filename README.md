@@ -101,9 +101,9 @@ Kosten werden dem Google-Konto des jeweiligen Key-Inhabers zugerechnet. Nach ein
 der Key erneut eingegeben werden. Zum Erstellen eines Keys: https://aistudio.google.com/apikey
 Bei vorübergehender Gemini-Überlastung (`503`) wird die Generierungsanfrage einmal automatisch
 wiederholt. Bleibt das konfigurierte Modell nicht verfügbar, wechselt die Anwendung automatisch
-zu `gemini-2.5-flash-lite`; auch dieser Aufruf verwendet den vom Besucher eingegebenen API-Key.
-Sind beide Modelle ausgelastet, erhält der Besucher eine verständliche Meldung und kann es später
-erneut versuchen.
+zu `gemini-2.5-flash-lite`. Bei einem nicht verfügbaren Modell (`404`) wird ebenfalls dieses
+Ausweichmodell versucht. Beide Aufrufe verwenden den vom Besucher eingegebenen API-Key. Sind auch
+die Ausweichversuche erfolglos, erhält der Besucher eine verständliche Meldung.
 
 Die öffentliche Demo ist durch ein gemeinsames Passwort geschützt. Verwende einen zufälligen Wert
 mit mindestens 32 Zeichen und hinterlege ihn ausschließlich als serverseitige Umgebungsvariable

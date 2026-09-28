@@ -90,6 +90,17 @@ export async function callLlm(prompt: string, apiKey: string): Promise<string> {
           );
         }
 
+        if (response.status === 404) {
+          await response.text();
+          if (modelIndex < models.length - 1) {
+            break;
+          }
+          throw new GeminiLlmError(
+            "Das konfigurierte Gemini-Modell wurde nicht gefunden. Prüfe GEMINI_MODEL und ob der API-Key Zugriff auf dieses Modell hat.",
+            404,
+          );
+        }
+
         if (!response.ok) {
           if (response.status === 401 || response.status === 403) {
             throw new GeminiLlmError(
