@@ -2,6 +2,7 @@ import { SYSTEM_INSTRUCTION } from "@/lib/rag/prompt";
 
 const GEMINI_API_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models";
 const DEFAULT_MODEL = "gemini-3.5-flash-lite";
+const FALLBACK_MODEL = "gemini-2.5-flash-lite";
 const REQUEST_TIMEOUT_MS = 60_000;
 const MAX_UNAVAILABLE_RETRIES = 1;
 const UNAVAILABLE_RETRY_DELAY_MS = 1_000;
@@ -41,91 +42,102 @@ function isGeminiResponse(value: unknown): value is GeminiResponse {
 }
 
 export async function callLlm(prompt: string, apiKey: string): Promise<string> {
-  const model = process.env.GEMINI_MODEL ?? DEFAULT_MODEL;
-  for (let attempt = 0; ; attempt += 1) {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const models = Array.from(
+    new Set([process.env.GEMINI_MODEL ?? DEFAULT_MODEL, FALLBACK_MODEL]),
+  );
 
-    try {
-      const response = await fetch(`${GEMINI_API_BASE_URL}/${model}:generateContent`, {
-        method: "POST",
-        headers: {
-          "x-goog-api-key": apiKey,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          systemInstruction: {
-            parts: [{ text: SYSTEM_INSTRUCTION }],
+  for (const [modelIndex, model] of models.entries()) {
+    for (let attempt = 0; ; attempt += 1) {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+      try {
+        const response = await fetch(`${GEMINI_API_BASE_URL}/${model}:generateContent`, {
+          method: "POST",
+          headers: {
+            "x-goog-api-key": apiKey,
+            "Content-Type": "application/json",
           },
-          contents: [
-            {
-              role: "user",
-              parts: [{ text: prompt }],
+          body: JSON.stringify({
+            systemInstruction: {
+              parts: [{ text: SYSTEM_INSTRUCTION }],
             },
-          ],
-          generationConfig: {
-            temperature: GENERATION_TEMPERATURE,
-          },
-        }),
-        signal: controller.signal,
-      });
+            contents: [
+              {
+                role: "user",
+                parts: [{ text: prompt }],
+              },
+            ],
+            generationConfig: {
+              temperature: GENERATION_TEMPERATURE,
+            },
+          }),
+          signal: controller.signal,
+        });
 
-      if (response.status === 503 && attempt < MAX_UNAVAILABLE_RETRIES) {
-        await response.text();
-        await sleep(UNAVAILABLE_RETRY_DELAY_MS);
-        continue;
-      }
-      if (!response.ok) {
-        if (response.status === 401 || response.status === 403) {
-          throw new GeminiLlmError(
-            "Der Gemini-API-Key ist ungültig oder hat keinen Zugriff auf dieses Modell.",
-            response.status,
-          );
-        }
-        if (response.status === 402 || response.status === 429) {
-          throw new GeminiLlmError(
-            "Das Gemini-Kontingent oder Guthaben für diesen API-Key ist ausgeschöpft.",
-            response.status,
-          );
-        }
         if (response.status === 503) {
+          await response.text();
+          if (attempt < MAX_UNAVAILABLE_RETRIES) {
+            await sleep(UNAVAILABLE_RETRY_DELAY_MS);
+            continue;
+          }
+          if (modelIndex < models.length - 1) {
+            break;
+          }
           throw new GeminiLlmError(
-            "Gemini ist derzeit stark ausgelastet. Bitte warte kurz und versuche es erneut. Dein API-Key ist dadurch nicht als ungültig bestätigt.",
+            "Gemini ist derzeit stark ausgelastet. Auch das Ausweichmodell ist nicht verfügbar. Bitte versuche es später erneut. Dein API-Key ist dadurch nicht als ungültig bestätigt.",
             503,
           );
         }
-        throw new GeminiLlmError(
-          `Die Gemini-Anfrage ist fehlgeschlagen (${response.status}). Bitte versuche es später erneut.`,
-          response.status,
-        );
-      }
 
-      const payload: unknown = await response.json();
-      if (!isGeminiResponse(payload)) {
-        throw new GeminiLlmError("Die LLM-Antwort hat ein ungültiges Format.", 502);
-      }
+        if (!response.ok) {
+          if (response.status === 401 || response.status === 403) {
+            throw new GeminiLlmError(
+              "Der Gemini-API-Key ist ungültig oder hat keinen Zugriff auf dieses Modell.",
+              response.status,
+            );
+          }
+          if (response.status === 402 || response.status === 429) {
+            throw new GeminiLlmError(
+              "Das Gemini-Kontingent oder Guthaben für diesen API-Key ist ausgeschöpft.",
+              response.status,
+            );
+          }
+          throw new GeminiLlmError(
+            `Die Gemini-Anfrage ist fehlgeschlagen (${response.status}). Bitte versuche es später erneut.`,
+            response.status,
+          );
+        }
 
-      const answer = payload.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-      if (!answer) {
-        throw new GeminiLlmError("Die LLM-Antwort enthält keinen Text.", 502);
-      }
+        const payload: unknown = await response.json();
+        if (!isGeminiResponse(payload)) {
+          throw new GeminiLlmError("Die LLM-Antwort hat ein ungültiges Format.", 502);
+        }
 
-      return answer;
-    } catch (error) {
-      if (error instanceof GeminiLlmError) {
-        throw error;
+        const answer = payload.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+        if (!answer) {
+          throw new GeminiLlmError("Die LLM-Antwort enthält keinen Text.", 502);
+        }
+
+        return answer;
+      } catch (error) {
+        if (error instanceof GeminiLlmError) {
+          throw error;
+        }
+        if (error instanceof DOMException && error.name === "AbortError") {
+          throw new GeminiLlmError(
+            `Die Gemini-Antwort hat das Zeitlimit von ${REQUEST_TIMEOUT_MS / 1_000} Sekunden überschritten.`,
+            504,
+          );
+        }
+        throw new GeminiLlmError("Gemini konnte die Antwort nicht erzeugen. Bitte versuche es erneut.", 502);
+      } finally {
+        clearTimeout(timeout);
       }
-      if (error instanceof DOMException && error.name === "AbortError") {
-        throw new GeminiLlmError(
-          `Die Gemini-Antwort hat das Zeitlimit von ${REQUEST_TIMEOUT_MS / 1_000} Sekunden überschritten.`,
-          504,
-        );
-      }
-      throw new GeminiLlmError("Gemini konnte die Antwort nicht erzeugen. Bitte versuche es erneut.", 502);
-    } finally {
-      clearTimeout(timeout);
     }
   }
+
+  throw new GeminiLlmError("Kein Gemini-Modell war für die Antwort verfügbar.", 503);
 }
 
 function sleep(ms: number): Promise<void> {

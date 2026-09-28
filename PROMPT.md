@@ -695,3 +695,16 @@ unterschieden. Automatisierte Tests decken erfolgreichen Retry und ausgeschöpft
 **Änderung:** Das Standardmodell für `generateContent` ist `gemini-3.5-flash-lite`.
 Der Default in `lib/llm/client.ts`, das Beispiel in `.env.example` und die README verwenden
 dieselbe Modell-ID. Ein gesetztes `GEMINI_MODEL` überschreibt den Code-Default weiterhin.
+
+---
+
+## 2026-09-28 – Fallback bei anhaltender Gemini-503-Überlastung (manuell)
+
+**Ausgangslage:** Die Chat-Anfragen erhielten wiederholt `503 UNAVAILABLE`, obwohl der primäre
+Modellaufruf bereits einmal wiederholt wurde.
+
+**Änderung:** `lib/llm/client.ts` versucht nach einem weiteren `503` automatisch
+`gemini-2.5-flash-lite`. Der konfigurierte `GEMINI_MODEL`-Wert bleibt das bevorzugte Modell.
+Die Ausweichanfrage nutzt denselben vom Besucher bereitgestellten API-Key; andere Fehler wie
+ungültige Schlüssel oder aufgebrauchte Kontingente lösen keinen Modellwechsel aus. Tests prüfen
+Fallback-Erfolg und den Fehlerfall, wenn beide Modelle ausgelastet sind.

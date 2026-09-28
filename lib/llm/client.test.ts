@@ -52,6 +52,39 @@ test("retries a temporary Gemini 503 once before returning the answer", async ()
   }
 });
 
+test("falls back to Gemini 2.5 Flash-Lite after the primary model stays unavailable", async () => {
+  const originalFetch = globalThis.fetch;
+  const originalModel = process.env.GEMINI_MODEL;
+  const requestedModels: string[] = [];
+  delete process.env.GEMINI_MODEL;
+  globalThis.fetch = async (input) => {
+    const url = String(input);
+    requestedModels.push(url);
+    if (url.includes("/gemini-2.5-flash-lite:")) {
+      return Response.json({
+        candidates: [{ content: { parts: [{ text: "Antwort aus dem Fallback." }] } }],
+      });
+    }
+    return Response.json({ error: { message: "temporary overload" } }, { status: 503 });
+  };
+
+  try {
+    const answer = await callLlm("Frage", "test-key");
+    assert.equal(answer, "Antwort aus dem Fallback.");
+    assert.equal(requestedModels.length, 3);
+    assert.ok(requestedModels[0].includes("/gemini-3.5-flash-lite:"));
+    assert.ok(requestedModels[1].includes("/gemini-3.5-flash-lite:"));
+    assert.ok(requestedModels[2].includes("/gemini-2.5-flash-lite:"));
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalModel === undefined) {
+      delete process.env.GEMINI_MODEL;
+    } else {
+      process.env.GEMINI_MODEL = originalModel;
+    }
+  }
+});
+
 test("returns a clear 503 message after the retry is exhausted", async () => {
   const originalFetch = globalThis.fetch;
   let attempts = 0;
@@ -70,9 +103,10 @@ test("returns a clear 503 message after the retry is exhausted", async () => {
         error instanceof GeminiLlmError &&
         error.statusCode === 503 &&
         /stark ausgelastet/.test(error.message) &&
-        !error.message.includes("provider internals"),
+      /Ausweichmodell/.test(error.message) &&
+      !error.message.includes("provider internals"),
     );
-    assert.equal(attempts, 2);
+    assert.equal(attempts, 4);
   } finally {
     globalThis.fetch = originalFetch;
   }
