@@ -78,3 +78,28 @@ test("returns a clear quota error after Gemini rejects embedding requests", asyn
     }
   }
 });
+
+test("returns a clear prepaid balance error for Gemini 402 responses", async () => {
+  const originalApiKey = process.env.GEMINI_API_KEY;
+  const originalFetch = globalThis.fetch;
+  process.env.GEMINI_API_KEY = "test-key";
+  globalThis.fetch = async () =>
+    Response.json({ error: { message: "payment required" } }, { status: 402 });
+
+  try {
+    await assert.rejects(
+      () => embedDocumentChunks([{ documentName: "Document", text: "Text" }]),
+      (error: unknown) =>
+        error instanceof GeminiEmbeddingError &&
+        error.statusCode === 402 &&
+        /Prepaid-Guthaben/.test(error.message),
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalApiKey === undefined) {
+      delete process.env.GEMINI_API_KEY;
+    } else {
+      process.env.GEMINI_API_KEY = originalApiKey;
+    }
+  }
+});

@@ -27,6 +27,7 @@ erfundenen Fakten. Genau darauf liegt der Fokus dieses Klons.
 | Text-/Markdown-Extraktion beim Upload | ✅ | Serverseitige Extraktion während der Ingestion |
 | Echtes PDF-Text-Parsing (Binärformat) | ✅ | `pdf-parse` extrahiert lesbaren Text serverseitig |
 | Retrieval über Embeddings/Vector-DB | ✅ | Gemini-Embeddings und Supabase Vector (`pgvector`) mit Similarity Retrieval |
+| Gespeicherte Quellen beim Öffnen wiederherstellen | ✅ | Dokument-Metadaten werden aus vorhandenen Supabase-Chunks geladen; Fragen und neue Uploads benötigen weiterhin Gemini API-Zugriff |
 | YouTube-URL als Quelle | ⚠️ lokal ja, auf Vercel eingeschränkt | Verfügbare YouTube-Untertitel, danach dieselbe RAG-Pipeline – funktioniert zuverlässig lokal, auf Vercel durch YouTubes IP-Blocking gegen Cloud-Provider bekannt unzuverlässig (siehe Abschnitt unten) |
 | Audio Overviews, Video Overviews, Mind Maps, Studio-Panel | ❌ bewusst nicht umgesetzt | Eigenständige Multimedia-Pipelines (TTS/Video-Rendering), außerhalb des Zeitrahmens und nicht Kern der Aufgabe |
 | Quellen einzeln ein-/ausschalten für den Kontext | ❌ (noch offen) | Aktuell fließen immer alle hochgeladenen Quellen in die Suche ein |
@@ -91,6 +92,13 @@ App läuft danach unter [http://localhost:3000](http://localhost:3000).
 | `GEMINI_MODEL` | nein | Standard: `gemini-flash-lite-latest` |
 | `SUPABASE_URL` | ja | URL des Supabase-Projekts |
 | `SUPABASE_SERVICE_ROLE_KEY` | ja | Server-only Supabase-Key, niemals im Browser verwenden |
+| `SOURCE_ACCESS_PASSWORD` | ja | Gemeinsames Demo-Passwort (mindestens 32 Zeichen); schützt Quellen und API-Routen, kein separates Nutzerkonto |
+
+Die öffentliche Demo ist durch ein gemeinsames Passwort geschützt. Verwende einen zufälligen Wert
+mit mindestens 32 Zeichen und hinterlege ihn ausschließlich als serverseitige Umgebungsvariable
+(lokal in `.env.local`, bei Vercel in den Project Settings). Nach dem Login werden die in Supabase
+gespeicherten Quellen geladen. Alle Personen mit diesem Demo-Passwort teilen sich denselben
+Quellenbestand; die Anwendung bietet keine individuellen Nutzerkonten.
 
 Das Embedding-Modell (`gemini-embedding-2`) ist bewusst **nicht** über eine Umgebungsvariable
 konfigurierbar, sondern eine feste Konstante in `lib/rag/embeddings.ts` – da die Vektorräume
@@ -131,13 +139,17 @@ nicht aus (niedrige RPM/TPM-Limits). Ein Google-AI-Pro-Abo (auch Studenten-Varia
 für direkte API-Aufrufe. Dieses Projekt nutzt daher Prepaid-Billing im Google-AI-Studio-Projekt
 (niedrige Kosten pro Embedding-Aufruf, deutlich höhere Rate-Limits). Siehe `PROMPT.md` für
 Details und einen bekannten `402`-Fehlerfall bei aufgebrauchtem/nicht synchronisiertem Guthaben.
+Bereits gespeicherte Quellen können auch ohne ein neues Ingest wieder in der Quellenliste erscheinen.
+Eine neue Frage benötigt jedoch weiterhin ein Gemini-Embedding und einen Gemini-LLM-Aufruf; gespeicherte
+Chunks allein ermöglichen daher keine neue Antwort, wenn der API-Zugriff nicht verfügbar ist.
 
 Für Vercel müssen dieselben Umgebungsvariablen in den Project Settings unter **Environment
 Variables** hinterlegt werden. `SUPABASE_SERVICE_ROLE_KEY` darf ausschließlich als
 serverseitige Variable verwendet werden und darf weder in Client-Code noch in eine
 `NEXT_PUBLIC_*`-Variable gelangen. Nach dem Setzen der Variablen kann Vercel den Build und
 die dynamischen API-Routen (`/api/documents/ingest`, `/api/documents/ingest-youtube`,
-`/api/chat`) ausführen.
+`/api/documents`, `/api/chat` und `/api/auth`) ausführen. Die Daten- und Ingestion-Routen sind nur
+nach Anmeldung mit `SOURCE_ACCESS_PASSWORD` erreichbar.
 
 ### YouTube-Untertitel und Betriebsgrenzen
 

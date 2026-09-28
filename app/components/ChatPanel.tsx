@@ -50,7 +50,13 @@ export function ChatPanel({ sources }: ChatPanelProps) {
       setMessages((current) => [...current, createMessage("assistant", payload.answer)]);
     } catch (error) {
       console.error("Chat submission failed:", error);
-      setMessages((current) => [...current, createMessage("assistant", REQUEST_ERROR_MESSAGE)]);
+      setMessages((current) => [
+        ...current,
+        createMessage(
+          "assistant",
+          error instanceof Error ? error.message : REQUEST_ERROR_MESSAGE,
+        ),
+      ]);
     } finally {
       setIsLoading(false);
     }

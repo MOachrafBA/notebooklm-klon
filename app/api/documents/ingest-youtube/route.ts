@@ -7,6 +7,7 @@ import {
   getGeminiEmbeddingHttpStatus,
 } from "@/lib/rag/embeddings";
 import { saveDocumentChunks } from "@/lib/rag/vectorStore";
+import { isDemoAccessAuthorized } from "@/lib/auth/demoAccess";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -20,6 +21,10 @@ function isRequestBody(value: unknown): value is { url: string } {
 }
 
 export async function POST(request: Request): Promise<Response> {
+  if (!isDemoAccessAuthorized(request)) {
+    return Response.json({ error: "Bitte melde dich an, bevor du eine Quelle hinzufügst." }, { status: 401 });
+  }
+
   let body: unknown;
   try {
     body = await request.json();

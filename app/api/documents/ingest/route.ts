@@ -9,6 +9,7 @@ import {
 } from "@/lib/rag/embeddings";
 import { findDocumentIdByContentHash, saveDocumentChunks } from "@/lib/rag/vectorStore";
 import { DOCUMENT_TYPES, type DocumentSource } from "@/lib/rag/types";
+import { isDemoAccessAuthorized } from "@/lib/auth/demoAccess";
 
 export const maxDuration = 60;
 export const runtime = "nodejs";
@@ -50,6 +51,10 @@ async function extractText(file: File, type: DocumentSource["type"]): Promise<st
 }
 
 export async function POST(request: Request): Promise<Response> {
+  if (!isDemoAccessAuthorized(request)) {
+    return Response.json({ error: "Bitte melde dich an, bevor du eine Quelle hinzufügst." }, { status: 401 });
+  }
+
   let formData: FormData;
   try {
     formData = await request.formData();
@@ -96,9 +101,16 @@ export async function POST(request: Request): Promise<Response> {
     const message = error instanceof GeminiEmbeddingError
       ? error.message
       : SERVER_ERROR_MESSAGE;
-    console.error("Document ingestion failed.");
+    console.error("Document ingestion failed:", error);
     return Response.json(
-      { error: message },
+      {
+        error: message,
+        ...(process.env.NODE_ENV !== "production" &&
+        error instanceof Error &&
+        !(error instanceof GeminiEmbeddingError)
+          ? { details: error.message }
+          : {}),
+      },
       {
         status: error instanceof GeminiEmbeddingError
           ? getGeminiEmbeddingHttpStatus(error)

@@ -3,6 +3,7 @@ import { embedQuestion } from "@/lib/rag/embeddings";
 import { buildPrompt } from "@/lib/rag/prompt";
 import { retrieveDocumentChunks } from "@/lib/rag/vectorStore";
 import type { ChatRequest } from "@/lib/rag/types";
+import { isDemoAccessAuthorized } from "@/lib/auth/demoAccess";
 
 export const maxDuration = 60;
 
@@ -25,6 +26,10 @@ function isChatRequest(value: unknown): value is ChatRequest {
 }
 
 export async function POST(request: Request): Promise<Response> {
+  if (!isDemoAccessAuthorized(request)) {
+    return Response.json({ error: "Bitte melde dich an, bevor du Fragen stellst." }, { status: 401 });
+  }
+
   let body: unknown;
   try {
     body = await request.json();

@@ -1,9 +1,10 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import type { SourceChunk } from "./types";
+import type { DocumentSource, SourceChunk } from "./types";
 
 const DOCUMENT_CHUNKS_TABLE = "document_chunks";
 const MATCH_CHUNKS_FUNCTION = "match_document_chunks";
 const DEFAULT_MATCH_COUNT = 5;
+const DOCUMENT_LIST_PAGE_SIZE = 500;
 
 interface StoredChunk {
   id: string;
@@ -21,6 +22,13 @@ interface StoredChunk {
 
 interface MatchedChunk extends StoredChunk {
   similarity: number;
+}
+
+interface StoredDocumentSummary {
+  document_id: string;
+  document_name: string;
+  source_url?: string | null;
+  video_id?: string | null;
 }
 
 function getSupabaseClient(): SupabaseClient {
@@ -70,6 +78,68 @@ function isMatchedChunk(value: unknown): value is MatchedChunk {
     typeof chunk.content === "string" &&
     typeof chunk.similarity === "number"
   );
+}
+
+function isStoredDocumentSummary(value: unknown): value is StoredDocumentSummary {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+
+  const document = value as Record<string, unknown>;
+  return (
+    typeof document.document_id === "string" &&
+    typeof document.document_name === "string" &&
+    (document.source_url === undefined || document.source_url === null || typeof document.source_url === "string") &&
+    (document.video_id === undefined || document.video_id === null || typeof document.video_id === "string")
+  );
+}
+
+export async function listDocumentSources(): Promise<DocumentSource[]> {
+  const supabase = getSupabaseClient();
+  const documents = new Map<string, DocumentSource>();
+
+  for (let offset = 0; ; offset += DOCUMENT_LIST_PAGE_SIZE) {
+    const { data, error } = await supabase
+      .from(DOCUMENT_CHUNKS_TABLE)
+      .select("document_id, document_name, source_url, video_id")
+      .order("document_id")
+      .order("chunk_index")
+      .range(offset, offset + DOCUMENT_LIST_PAGE_SIZE - 1);
+
+    if (error) {
+      throw new Error(`Supabase konnte gespeicherte Quellen nicht laden: ${error.message}`);
+    }
+    if (!Array.isArray(data)) {
+      throw new Error("Supabase lieferte ein ungültiges Quellenformat.");
+    }
+
+    for (const value of data) {
+      if (!isStoredDocumentSummary(value) || documents.has(value.document_id)) {
+        continue;
+      }
+
+      const isYouTube = Boolean(value.video_id || value.source_url);
+      const type = isYouTube
+        ? "youtube"
+        : value.document_name.toLocaleLowerCase().endsWith(".pdf")
+          ? "pdf"
+          : "text";
+      documents.set(value.document_id, {
+        id: value.document_id,
+        name: value.document_name,
+        type,
+        content: "",
+        ...(value.source_url ? { sourceUrl: value.source_url } : {}),
+        ...(value.video_id ? { videoId: value.video_id } : {}),
+      });
+    }
+
+    if (data.length < DOCUMENT_LIST_PAGE_SIZE) {
+      break;
+    }
+  }
+
+  return [...documents.values()].sort((left, right) => left.name.localeCompare(right.name));
 }
 
 export async function saveDocumentChunks(

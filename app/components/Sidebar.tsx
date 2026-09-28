@@ -8,6 +8,9 @@ const MAX_UPLOAD_SIZE_BYTES = 5_000_000;
 
 interface SidebarProps {
   sources: DocumentSource[];
+  isSourcesLoading: boolean;
+  sourceLoadError: string | null;
+  onLogout: () => Promise<void>;
   onSourceAdded: (
     source: Pick<DocumentSource, "id" | "name" | "type">,
     file: File,
@@ -22,6 +25,9 @@ function getDocumentType(fileName: string): DocumentType {
 
 export function Sidebar({
   sources,
+  isSourcesLoading,
+  sourceLoadError,
+  onLogout,
   onSourceAdded,
   onYouTubeAdded,
   onSourceRemoved,
@@ -81,6 +87,17 @@ export function Sidebar({
         <p className="text-xs font-semibold uppercase tracking-[0.2em] text-indigo-600">Notebook</p>
         <h1 className="mt-2 text-2xl font-semibold tracking-tight text-slate-950">Sourcewise</h1>
         <p className="mt-2 text-sm leading-6 text-slate-500">Deine Dokumente, dein Kontext.</p>
+        <button
+          type="button"
+          onClick={() => {
+            void onLogout().catch((error: unknown) => {
+              setUploadError(error instanceof Error ? error.message : "Die Abmeldung ist fehlgeschlagen.");
+            });
+          }}
+          className="mt-3 text-xs font-medium text-slate-500 underline underline-offset-2 hover:text-slate-900"
+        >
+          Abmelden
+        </button>
       </div>
 
       <button
@@ -120,6 +137,7 @@ export function Sidebar({
         </button>
       </form>
       {uploadError && <p className="mt-3 text-sm text-rose-600">{uploadError}</p>}
+      {sourceLoadError && <p className="mt-3 text-sm text-rose-600">{sourceLoadError}</p>}
 
       <div className="mt-8">
         <div className="flex items-center justify-between">
@@ -127,7 +145,10 @@ export function Sidebar({
           <span className="rounded-full bg-slate-100 px-2 py-1 text-xs text-slate-500">{sources.length}</span>
         </div>
         <ul className="mt-4 space-y-2">
-          {sources.length === 0 && <li className="text-sm leading-6 text-slate-400">Noch keine Quellen geladen.</li>}
+          {isSourcesLoading && <li className="text-sm leading-6 text-slate-400">Gespeicherte Quellen werden geladen …</li>}
+          {!isSourcesLoading && sources.length === 0 && (
+            <li className="text-sm leading-6 text-slate-400">Noch keine Quellen geladen.</li>
+          )}
           {sources.map((source) => (
             <li key={source.id} className="group flex items-center gap-3 rounded-xl border border-slate-100 p-3">
               <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-indigo-50 text-xs font-semibold text-indigo-600">

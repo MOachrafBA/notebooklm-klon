@@ -629,3 +629,27 @@ projektspezifischer Bug.
 **Code-Änderung:** `lib/rag/embeddings.ts` behandelt `402` jetzt explizit mit einer
 verständlichen Fehlermeldung (Verweis auf den Billing-Bereich in AI Studio) statt der generischen
 "fehlgeschlagen (402)"-Meldung, analog zur bereits vorhandenen `429`-Sonderbehandlung.
+
+---
+
+## 2026-09-28 – Gespeicherte Quellen laden und Ingestion-Fehler sichtbar machen (manuell)
+
+**Ausgangslage:** Die Quellenliste lebte nur im Frontend-State. Nach einem Neuladen waren bereits in
+Supabase gespeicherte Dokument-Chunks zwar vorhanden, aber die Chat-Eingabe blieb deaktiviert, weil
+keine aktive Quelle im Frontend ausgewählt war. Unerwartete PDF-/Text-Ingestion-Fehler wurden zudem
+auf eine allgemeine Meldung reduziert.
+
+**Änderungen:** `GET /api/documents` lädt eindeutige Quellen-Metadaten seitenweise aus den
+gespeicherten Chunks. Die Startseite stellt sie beim Laden wieder her; es werden weder Inhalte noch
+Embeddings an den Browser übertragen. Unerwartete Ingestion-Fehler werden serverseitig vollständig
+geloggt und ihre Details nur in der Entwicklungsumgebung zusätzlich zurückgegeben. Typisierte
+Gemini-Fehler wie fehlendes oder aufgebrauchtes Guthaben behalten ihre gezielte Meldung.
+
+Da die Anwendung öffentlich deployed ist und keine individuellen Nutzerkonten hat, ist die
+Quellenliste sowie Chat und Ingestion hinter einem gemeinsamen `SOURCE_ACCESS_PASSWORD` geschützt.
+Die Anmeldung setzt ein HttpOnly-, SameSite-Cookie mit zeitlich begrenzter HMAC-Signatur; die
+geschützten Route Handler prüfen dieses Cookie serverseitig. Das Passwort muss mindestens 32
+Zeichen lang sein und bleibt ausschließlich in Server-Environment-Variablen.
+
+**Grenze:** Eine neue Chat-Anfrage braucht weiterhin ein Gemini-Embedding für die Frage sowie einen
+Gemini-Aufruf für die Antwort. Vorhandene gespeicherte Chunks ersetzen diese API-Aufrufe nicht.
