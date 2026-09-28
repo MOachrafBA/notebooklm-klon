@@ -687,3 +687,11 @@ Versuch hat ein eigenes 20-Sekunden-Timeout. Bleibt der Provider ausgelastet, li
 Status `503` und eine verständliche, nicht an Provider-Interna gekoppelte Meldung an die UI. Andere
 Fehlerklassen wie ungültiger Key (`401`/`403`) und Kontingent/Billing (`402`/`429`) bleiben
 unterschieden. Automatisierte Tests decken erfolgreichen Retry und ausgeschöpfte Wiederholung ab.
+
+---
+
+## 2026-09-28 – Gemini-Generierungsmodell auf Flash-Lite 3.5 setzen (manuell)
+
+**Änderung:** Das Standardmodell für `generateContent` ist `gemini-3.5-flash-lite`.
+Der Default in `lib/llm/client.ts`, das Beispiel in `.env.example` und die README verwenden
+dieselbe Modell-ID. Ein gesetztes `GEMINI_MODEL` überschreibt den Code-Default weiterhin.

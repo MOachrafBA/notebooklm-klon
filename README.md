@@ -36,7 +36,7 @@ erfundenen Fakten. Genau darauf liegt der Fokus dieses Klons.
 
 - **Framework:** Next.js 16 (App Router, TypeScript)
 - **Styling:** Tailwind CSS 4
-- **LLM:** Google Gemini API (`gemini-flash-lite-latest` als Default, über `GEMINI_MODEL`
+- **LLM:** Google Gemini API (`gemini-3.5-flash-lite` als Default, über `GEMINI_MODEL`
   konfigurierbar)
 - **RAG-Ansatz:** Dokumente werden serverseitig gechunkt, mit dem Gemini-Embedding-Modell
   `gemini-embedding-2` vektorisiert und in Supabase Vector (Postgres/pgvector) gespeichert.
@@ -88,7 +88,7 @@ App läuft danach unter [http://localhost:3000](http://localhost:3000).
 
 | Variable | Pflicht | Beschreibung |
 |---|---|---|
-| `GEMINI_MODEL` | nein | Serverseitige Modellwahl, Standard: `gemini-flash-lite-latest` |
+| `GEMINI_MODEL` | nein | Serverseitige Modellwahl, Standard: `gemini-3.5-flash-lite` |
 | `SUPABASE_URL` | ja | URL des Supabase-Projekts |
 | `SUPABASE_SERVICE_ROLE_KEY` | ja | Server-only Supabase-Key, niemals im Browser verwenden |
 | `SOURCE_ACCESS_PASSWORD` | ja | Gemeinsames Demo-Passwort (mindestens 32 Zeichen); schützt Quellen und API-Routen, kein separates Nutzerkonto |

@@ -2,6 +2,31 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { callLlm, GeminiLlmError } from "./client";
 
+test("uses Gemini 3.5 Flash-Lite when no model override is configured", async () => {
+  const originalFetch = globalThis.fetch;
+  const originalModel = process.env.GEMINI_MODEL;
+  let requestedUrl = "";
+  delete process.env.GEMINI_MODEL;
+  globalThis.fetch = async (input) => {
+    requestedUrl = String(input);
+    return Response.json({
+      candidates: [{ content: { parts: [{ text: "Antwort." }] } }],
+    });
+  };
+
+  try {
+    await callLlm("Frage", "test-key");
+    assert.match(requestedUrl, /\/gemini-3\.5-flash-lite:generateContent$/);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalModel === undefined) {
+      delete process.env.GEMINI_MODEL;
+    } else {
+      process.env.GEMINI_MODEL = originalModel;
+    }
+  }
+});
+
 test("retries a temporary Gemini 503 once before returning the answer", async () => {
   const originalFetch = globalThis.fetch;
   let attempts = 0;

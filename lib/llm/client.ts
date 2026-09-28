@@ -1,7 +1,7 @@
 import { SYSTEM_INSTRUCTION } from "@/lib/rag/prompt";
 
 const GEMINI_API_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models";
-const DEFAULT_MODEL = "gemini-flash-lite-latest";
+const DEFAULT_MODEL = "gemini-3.5-flash-lite";
 const REQUEST_TIMEOUT_MS = 60_000;
 const MAX_UNAVAILABLE_RETRIES = 1;
 const UNAVAILABLE_RETRY_DELAY_MS = 1_000;
