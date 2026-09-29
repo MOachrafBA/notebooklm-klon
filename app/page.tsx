@@ -235,7 +235,7 @@ export default function Home() {
     setSourceLoadError(null);
   }
 
-  function removeSource(sourceId: string) {
+  function hideSourceFromContext(sourceId: string) {
     setSources((current) => current.filter((source) => source.id !== sourceId));
   }
 
@@ -291,7 +291,7 @@ export default function Home() {
         onLogout={logout}
         onSourceAdded={addSource}
         onYouTubeAdded={addYouTubeSource}
-        onSourceRemoved={removeSource}
+        onSourceHidden={hideSourceFromContext}
       />
       <ChatPanel sources={sources} />
     </main>

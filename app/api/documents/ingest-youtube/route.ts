@@ -6,8 +6,13 @@ import {
   GeminiEmbeddingError,
   getGeminiEmbeddingHttpStatus,
 } from "@/lib/rag/embeddings";
-import { saveDocumentChunks } from "@/lib/rag/vectorStore";
+import { findDocumentSourceById, saveDocumentChunks } from "@/lib/rag/vectorStore";
 import { isDemoAccessAuthorized } from "@/lib/auth/demoAccess";
+import {
+  consumeDemoRateLimit,
+  DemoRateLimitError,
+  YOUTUBE_INGESTION_RATE_LIMIT,
+} from "@/lib/auth/demoRateLimit";
 import { getGeminiApiKey } from "@/lib/gemini/requestKey";
 
 export const runtime = "nodejs";
@@ -48,6 +53,25 @@ export async function POST(request: Request): Promise<Response> {
   const documentId = `youtube-${validation.videoId}`;
   const documentName = `YouTube ${validation.videoId}`;
   try {
+    const existingSource = await findDocumentSourceById(documentId);
+    if (existingSource) {
+      return Response.json({
+        documentId: existingSource.id,
+        name: existingSource.name,
+        type: "youtube",
+        videoId: validation.videoId,
+        sourceUrl: validation.canonicalUrl,
+        duplicate: true,
+      });
+    }
+
+    if (!await consumeDemoRateLimit(request, YOUTUBE_INGESTION_RATE_LIMIT)) {
+      return Response.json(
+        { error: "Zu viele YouTube-Quellen in kurzer Zeit. Bitte warte einige Minuten und versuche es erneut." },
+        { status: 429 },
+      );
+    }
+
     const segments = await fetchYouTubeCaptions(validation.videoId);
     const chunks = transcriptSegmentsToChunks(
       segments,
@@ -71,7 +95,9 @@ export async function POST(request: Request): Promise<Response> {
       segmentCount: chunks.length,
     });
   } catch (error) {
-    const message = error instanceof YouTubeCaptionsError
+    const message = error instanceof DemoRateLimitError
+      ? "Die Demo-Kapazität konnte nicht geprüft werden. Bitte versuche es später erneut."
+      : error instanceof YouTubeCaptionsError
       ? error.message
       : error instanceof GeminiEmbeddingError
         ? error.message
@@ -80,7 +106,9 @@ export async function POST(request: Request): Promise<Response> {
     return Response.json(
       { error: message },
       {
-        status: error instanceof YouTubeCaptionsError
+        status: error instanceof DemoRateLimitError
+          ? 503
+          : error instanceof YouTubeCaptionsError
           ? error.statusCode
           : error instanceof GeminiEmbeddingError
             ? getGeminiEmbeddingHttpStatus(error)

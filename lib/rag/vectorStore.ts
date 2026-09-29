@@ -31,6 +31,24 @@ interface StoredDocumentSummary {
   video_id?: string | null;
 }
 
+function toDocumentSource(document: StoredDocumentSummary): DocumentSource {
+  const isYouTube = Boolean(document.video_id || document.source_url);
+  const type = isYouTube
+    ? "youtube"
+    : document.document_name.toLocaleLowerCase().endsWith(".pdf")
+      ? "pdf"
+      : "text";
+
+  return {
+    id: document.document_id,
+    name: document.document_name,
+    type,
+    content: "",
+    ...(document.source_url ? { sourceUrl: document.source_url } : {}),
+    ...(document.video_id ? { videoId: document.video_id } : {}),
+  };
+}
+
 function getSupabaseClient(): SupabaseClient {
   const url = process.env.SUPABASE_URL;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -118,20 +136,7 @@ export async function listDocumentSources(): Promise<DocumentSource[]> {
         continue;
       }
 
-      const isYouTube = Boolean(value.video_id || value.source_url);
-      const type = isYouTube
-        ? "youtube"
-        : value.document_name.toLocaleLowerCase().endsWith(".pdf")
-          ? "pdf"
-          : "text";
-      documents.set(value.document_id, {
-        id: value.document_id,
-        name: value.document_name,
-        type,
-        content: "",
-        ...(value.source_url ? { sourceUrl: value.source_url } : {}),
-        ...(value.video_id ? { videoId: value.video_id } : {}),
-      });
+      documents.set(value.document_id, toDocumentSource(value));
     }
 
     if (data.length < DOCUMENT_LIST_PAGE_SIZE) {
@@ -140,6 +145,24 @@ export async function listDocumentSources(): Promise<DocumentSource[]> {
   }
 
   return [...documents.values()].sort((left, right) => left.name.localeCompare(right.name));
+}
+
+export async function findDocumentSourceById(documentId: string): Promise<DocumentSource | null> {
+  const { data, error } = await getSupabaseClient()
+    .from(DOCUMENT_CHUNKS_TABLE)
+    .select("document_id, document_name, source_url, video_id")
+    .eq("document_id", documentId)
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`Supabase konnte nicht nach der Quelle suchen: ${error.message}`);
+  }
+  if (!isStoredDocumentSummary(data)) {
+    return null;
+  }
+
+  return toDocumentSource(data);
 }
 
 export async function saveDocumentChunks(

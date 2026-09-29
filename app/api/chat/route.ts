@@ -4,6 +4,7 @@ import { buildPrompt } from "@/lib/rag/prompt";
 import { retrieveDocumentChunks } from "@/lib/rag/vectorStore";
 import type { ChatRequest } from "@/lib/rag/types";
 import { isDemoAccessAuthorized } from "@/lib/auth/demoAccess";
+import { CHAT_RATE_LIMIT, consumeDemoRateLimit, DemoRateLimitError } from "@/lib/auth/demoRateLimit";
 import { getGeminiApiKey } from "@/lib/gemini/requestKey";
 
 export const maxDuration = 60;
@@ -44,6 +45,21 @@ export async function POST(request: Request): Promise<Response> {
 
   if (!isChatRequest(body)) {
     return Response.json({ error: BAD_REQUEST_MESSAGE }, { status: 400 });
+  }
+
+  try {
+    if (!await consumeDemoRateLimit(request, CHAT_RATE_LIMIT)) {
+      return Response.json(
+        { error: "Zu viele Fragen in kurzer Zeit. Bitte warte kurz und versuche es erneut." },
+        { status: 429 },
+      );
+    }
+  } catch (error) {
+    console.error("Checking chat rate limit failed:", error);
+    return Response.json(
+      { error: "Die Demo-Kapazität konnte nicht geprüft werden. Bitte versuche es später erneut." },
+      { status: error instanceof DemoRateLimitError ? 503 : 500 },
+    );
   }
 
   try {

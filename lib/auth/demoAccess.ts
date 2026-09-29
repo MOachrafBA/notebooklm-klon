@@ -1,4 +1,4 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 
 export const DEMO_ACCESS_COOKIE = "sourcewise_demo_access";
 export const DEMO_SESSION_MAX_AGE_SECONDS = 60 * 60 * 12;
@@ -28,6 +28,15 @@ export function isDemoAccessAuthorized(request: Request): boolean {
     return false;
   }
 
+  return getDemoAccessSessionId(request) !== null;
+}
+
+export function getDemoAccessSessionId(request: Request): string | null {
+  const password = getDemoAccessPassword();
+  if (!password) {
+    return null;
+  }
+
   const cookieHeader = request.headers.get("cookie");
   const cookie = cookieHeader
     ?.split(";")
@@ -35,7 +44,7 @@ export function isDemoAccessAuthorized(request: Request): boolean {
     .find((part) => part.startsWith(`${DEMO_ACCESS_COOKIE}=`));
   const token = cookie?.slice(DEMO_ACCESS_COOKIE.length + 1);
   if (!token) {
-    return false;
+    return null;
   }
 
   const [expiresAtText, signature, extra] = token.split(".");
@@ -46,12 +55,14 @@ export function isDemoAccessAuthorized(request: Request): boolean {
     expiresAt <= Math.floor(Date.now() / 1_000) ||
     !signature
   ) {
-    return false;
+    return null;
   }
 
   const expected = Buffer.from(createSessionSignature(expiresAt, password));
   const actual = Buffer.from(signature);
-  return actual.length === expected.length && timingSafeEqual(actual, expected);
+  return actual.length === expected.length && timingSafeEqual(actual, expected)
+    ? createHash("sha256").update(token).digest("hex")
+    : null;
 }
 
 function createSessionSignature(expiresAt: number, password: string): string {

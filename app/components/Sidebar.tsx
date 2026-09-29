@@ -16,7 +16,7 @@ interface SidebarProps {
     file: File,
   ) => Promise<void>;
   onYouTubeAdded: (url: string) => Promise<void>;
-  onSourceRemoved: (sourceId: string) => void;
+  onSourceHidden: (sourceId: string) => void;
 }
 
 function getDocumentType(fileName: string): DocumentType {
@@ -30,7 +30,7 @@ export function Sidebar({
   onLogout,
   onSourceAdded,
   onYouTubeAdded,
-  onSourceRemoved,
+  onSourceHidden,
 }: SidebarProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -157,8 +157,9 @@ export function Sidebar({
               <span className="min-w-0 flex-1 truncate text-sm text-slate-700">{source.name}</span>
               <button
                 type="button"
-                aria-label={`${source.name} entfernen`}
-                onClick={() => onSourceRemoved(source.id)}
+                aria-label={`${source.name} aus dem Kontext ausblenden`}
+                title="Aus dem Kontext ausblenden"
+                onClick={() => onSourceHidden(source.id)}
                 className="text-slate-300 opacity-0 transition hover:text-rose-500 group-hover:opacity-100"
               >
                 ×

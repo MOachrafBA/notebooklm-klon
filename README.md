@@ -149,6 +149,11 @@ verlässliche Demo sollte im zugehörigen Google-AI-Studio-Projekt Billing aktiv
 kleines Ausgabenlimit gesetzt werden. Ein Google-AI-Pro-Abo (auch Studenten-Variante) ist nicht
 automatisch dasselbe wie Gemini Developer API-Billing. `402`-/`429`-Fehler werden mit einer
 passenden Meldung angezeigt.
+
+Die Anwendung begrenzt zusätzlich pro angemeldeter Demo-Sitzung zehn Chatfragen pro Minute,
+drei Dokument-Uploads und zwei YouTube-Imports pro zehn Minuten. Dieselben Quellen werden beim
+erneuten Upload nicht erneut eingebettet. "Ausblenden" entfernt eine Quelle nur aus dem aktuellen
+Kontext; die gemeinsame Demo-Quellenbibliothek bleibt absichtlich erhalten.
 Bereits gespeicherte Quellen können auch ohne ein neues Ingest wieder in der Quellenliste erscheinen.
 Eine neue Frage benötigt jedoch weiterhin ein Gemini-Embedding und einen Gemini-LLM-Aufruf; gespeicherte
 Chunks allein ermöglichen daher keine neue Antwort, wenn der API-Zugriff nicht verfügbar ist.

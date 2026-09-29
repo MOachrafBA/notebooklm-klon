@@ -10,6 +10,11 @@ import {
 import { findDocumentIdByContentHash, saveDocumentChunks } from "@/lib/rag/vectorStore";
 import { DOCUMENT_TYPES, type DocumentSource } from "@/lib/rag/types";
 import { isDemoAccessAuthorized } from "@/lib/auth/demoAccess";
+import {
+  consumeDemoRateLimit,
+  DemoRateLimitError,
+  DOCUMENT_INGESTION_RATE_LIMIT,
+} from "@/lib/auth/demoRateLimit";
 import { getGeminiApiKey } from "@/lib/gemini/requestKey";
 
 export const maxDuration = 60;
@@ -92,6 +97,21 @@ export async function POST(request: Request): Promise<Response> {
     const existingDocumentId = await findDocumentIdByContentHash(contentHash);
     if (existingDocumentId) {
       return Response.json({ documentId: existingDocumentId, content, duplicate: true });
+    }
+
+    try {
+      if (!await consumeDemoRateLimit(request, DOCUMENT_INGESTION_RATE_LIMIT)) {
+        return Response.json(
+          { error: "Zu viele Quellen in kurzer Zeit. Bitte warte einige Minuten und versuche es erneut." },
+          { status: 429 },
+        );
+      }
+    } catch (error) {
+      console.error("Checking document ingestion rate limit failed:", error);
+      return Response.json(
+        { error: "Die Demo-Kapazität konnte nicht geprüft werden. Bitte versuche es später erneut." },
+        { status: error instanceof DemoRateLimitError ? 503 : 500 },
+      );
     }
 
     const document: DocumentSource = { ...metadata, content };

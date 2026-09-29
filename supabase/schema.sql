@@ -30,6 +30,48 @@ create index if not exists document_chunks_document_id_idx
 create index if not exists document_chunks_content_hash_idx
   on document_chunks (content_hash);
 
+create table if not exists demo_rate_limits (
+  bucket_start timestamptz not null,
+  scope text not null,
+  key_hash text not null,
+  request_count integer not null default 0,
+  primary key (bucket_start, scope, key_hash)
+);
+
+alter table demo_rate_limits enable row level security;
+
+create or replace function consume_demo_rate_limit(
+  p_scope text,
+  p_key_hash text,
+  p_max_requests integer,
+  p_window_seconds integer
+)
+returns boolean
+language plpgsql
+as $$
+declare
+  bucket_start timestamptz;
+  is_allowed boolean;
+begin
+  if p_max_requests <= 0 or p_window_seconds <= 0 then
+    raise exception 'Rate-limit parameters must be positive';
+  end if;
+
+  bucket_start := to_timestamp(
+    floor(extract(epoch from clock_timestamp()) / p_window_seconds) * p_window_seconds
+  );
+
+  insert into demo_rate_limits (bucket_start, scope, key_hash, request_count)
+  values (bucket_start, p_scope, p_key_hash, 1)
+  on conflict (bucket_start, scope, key_hash) do update
+    set request_count = demo_rate_limits.request_count + 1
+    where demo_rate_limits.request_count < p_max_requests
+  returning true into is_allowed;
+
+  return coalesce(is_allowed, false);
+end;
+$$;
+
 drop function if exists match_document_chunks(vector, integer, text[]);
 
 create or replace function match_document_chunks(
