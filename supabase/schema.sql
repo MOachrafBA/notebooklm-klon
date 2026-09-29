@@ -50,19 +50,19 @@ returns boolean
 language plpgsql
 as $$
 declare
-  bucket_start timestamptz;
+  v_bucket_start timestamptz;
   is_allowed boolean;
 begin
   if p_max_requests <= 0 or p_window_seconds <= 0 then
     raise exception 'Rate-limit parameters must be positive';
   end if;
 
-  bucket_start := to_timestamp(
+  v_bucket_start := to_timestamp(
     floor(extract(epoch from clock_timestamp()) / p_window_seconds) * p_window_seconds
   );
 
   insert into demo_rate_limits (bucket_start, scope, key_hash, request_count)
-  values (bucket_start, p_scope, p_key_hash, 1)
+  values (v_bucket_start, p_scope, p_key_hash, 1)
   on conflict (bucket_start, scope, key_hash) do update
     set request_count = demo_rate_limits.request_count + 1
     where demo_rate_limits.request_count < p_max_requests
