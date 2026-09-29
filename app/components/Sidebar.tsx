@@ -8,8 +8,6 @@ const MAX_UPLOAD_SIZE_BYTES = 5_000_000;
 
 interface SidebarProps {
   sources: DocumentSource[];
-  geminiApiKey: string;
-  onGeminiApiKeyChange: (apiKey: string) => void;
   isSourcesLoading: boolean;
   sourceLoadError: string | null;
   onLogout: () => Promise<void>;
@@ -27,8 +25,6 @@ function getDocumentType(fileName: string): DocumentType {
 
 export function Sidebar({
   sources,
-  geminiApiKey,
-  onGeminiApiKeyChange,
   isSourcesLoading,
   sourceLoadError,
   onLogout,
@@ -104,38 +100,9 @@ export function Sidebar({
         </button>
       </div>
 
-      <div className="mb-5">
-        <label htmlFor="gemini-api-key" className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
-          Dein Gemini API-Key
-        </label>
-        <input
-          id="gemini-api-key"
-          type="password"
-          autoComplete="off"
-          spellCheck={false}
-          value={geminiApiKey}
-          onChange={(event) => onGeminiApiKeyChange(event.target.value)}
-          placeholder="AIza…"
-          className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-indigo-400"
-        />
-        <p className="mt-2 text-xs leading-5 text-slate-500">
-          Nur für diese Sitzung im Arbeitsspeicher. Wird über den App-Server an Gemini gesendet;
-          API-Kosten trägt der Inhaber des Keys.{" "}
-          <a
-            href="https://aistudio.google.com/apikey"
-            target="_blank"
-            rel="noreferrer"
-            className="text-indigo-600 underline underline-offset-2"
-          >
-            Eigenen Key erstellen
-          </a>
-        </p>
-      </div>
-
       <button
         type="button"
         onClick={() => fileInputRef.current?.click()}
-        disabled={!geminiApiKey.trim()}
         className="rounded-xl bg-slate-950 px-4 py-3 text-sm font-medium text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
       >
         + Quelle hinzufügen
@@ -158,20 +125,17 @@ export function Sidebar({
           value={youtubeUrl}
           onChange={(event) => setYoutubeUrl(event.target.value)}
           placeholder="https://youtu.be/…"
-          disabled={isYouTubeLoading || !geminiApiKey.trim()}
+          disabled={isYouTubeLoading}
           className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-indigo-400 disabled:bg-slate-50"
         />
         <button
           type="submit"
-          disabled={!youtubeUrl.trim() || isYouTubeLoading || !geminiApiKey.trim()}
+          disabled={!youtubeUrl.trim() || isYouTubeLoading}
           className="w-full rounded-xl border border-indigo-200 px-4 py-2 text-sm font-medium text-indigo-700 transition hover:bg-indigo-50 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {isYouTubeLoading ? "YouTube wird verarbeitet …" : "YouTube-Quelle hinzufügen"}
         </button>
       </form>
-      {!geminiApiKey.trim() && (
-        <p className="mt-2 text-xs text-slate-500">Gib deinen Gemini API-Key ein, um Quellen hinzuzufügen und Fragen zu stellen.</p>
-      )}
       {uploadError && <p className="mt-3 text-sm text-rose-600">{uploadError}</p>}
       {sourceLoadError && <p className="mt-3 text-sm text-rose-600">{sourceLoadError}</p>}
 

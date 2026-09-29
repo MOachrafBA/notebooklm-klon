@@ -55,9 +55,9 @@ export async function POST(request: Request): Promise<Response> {
   if (!isDemoAccessAuthorized(request)) {
     return Response.json({ error: "Bitte melde dich an, bevor du eine Quelle hinzufügst." }, { status: 401 });
   }
-  const apiKey = getGeminiApiKey(request);
+  const apiKey = getGeminiApiKey();
   if (!apiKey) {
-    return Response.json({ error: "Gib zuerst deinen Gemini-API-Key ein." }, { status: 400 });
+    return Response.json({ error: "Der Gemini-Zugang für diese Demo ist nicht konfiguriert." }, { status: 503 });
   }
 
   let formData: FormData;

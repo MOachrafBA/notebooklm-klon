@@ -1,7 +1,5 @@
-export const GEMINI_API_KEY_HEADER = "x-gemini-api-key";
-
-export function getGeminiApiKey(request: Request): string | null {
-  const apiKey = request.headers.get(GEMINI_API_KEY_HEADER)?.trim();
+export function getGeminiApiKey(): string | null {
+  const apiKey = process.env.GEMINI_API_KEY?.trim();
   if (!apiKey || apiKey.length > 512) {
     return null;
   }

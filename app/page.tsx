@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { AccessGate } from "@/app/components/AccessGate";
 import { ChatPanel } from "@/app/components/ChatPanel";
 import { Sidebar } from "@/app/components/Sidebar";
-import { GEMINI_API_KEY_HEADER } from "@/lib/gemini/requestKey";
 import type { DocumentSource } from "@/lib/rag/types";
 
 interface IngestResponse { documentId: string; content: string; duplicate?: boolean }
@@ -93,7 +92,6 @@ function getApiError(value: unknown, fallback: string): string {
 
 export default function Home() {
   const [sources, setSources] = useState<DocumentSource[]>([]);
-  const [geminiApiKey, setGeminiApiKey] = useState("");
   const [isSourcesLoading, setIsSourcesLoading] = useState(true);
   const [sourceLoadError, setSourceLoadError] = useState<string | null>(null);
   const [accessStatus, setAccessStatus] = useState<AccessStatus>("checking");
@@ -186,10 +184,6 @@ export default function Home() {
     source: Pick<DocumentSource, "id" | "name" | "type">,
     file: File,
   ) {
-    if (!geminiApiKey.trim()) {
-      throw new Error("Gib zuerst deinen Gemini-API-Key ein.");
-    }
-
     const formData = new FormData();
     formData.append("id", source.id);
     formData.append("name", source.name);
@@ -198,7 +192,6 @@ export default function Home() {
 
     const response = await fetch("/api/documents/ingest", {
       method: "POST",
-      headers: { [GEMINI_API_KEY_HEADER]: geminiApiKey.trim() },
       body: formData,
     });
     const payload: unknown = await response.json();
@@ -217,15 +210,10 @@ export default function Home() {
   }
 
   async function addYouTubeSource(url: string) {
-    if (!geminiApiKey.trim()) {
-      throw new Error("Gib zuerst deinen Gemini-API-Key ein.");
-    }
-
     const response = await fetch("/api/documents/ingest-youtube", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        [GEMINI_API_KEY_HEADER]: geminiApiKey.trim(),
       },
       body: JSON.stringify({ url }),
     });
@@ -257,7 +245,6 @@ export default function Home() {
       throw new Error("Die Abmeldung ist fehlgeschlagen.");
     }
     setSources([]);
-    setGeminiApiKey("");
     setIsSourcesLoading(true);
     setAccessStatus("login");
   }
@@ -299,8 +286,6 @@ export default function Home() {
     <main className="flex min-h-screen flex-col bg-white md:flex-row">
       <Sidebar
         sources={sources}
-        geminiApiKey={geminiApiKey}
-        onGeminiApiKeyChange={setGeminiApiKey}
         isSourcesLoading={isSourcesLoading}
         sourceLoadError={sourceLoadError}
         onLogout={logout}
@@ -308,7 +293,7 @@ export default function Home() {
         onYouTubeAdded={addYouTubeSource}
         onSourceRemoved={removeSource}
       />
-      <ChatPanel sources={sources} geminiApiKey={geminiApiKey} />
+      <ChatPanel sources={sources} />
     </main>
   );
 }
