@@ -9,7 +9,6 @@ import {
 } from "@/lib/rag/embeddings";
 import { findDocumentIdByContentHash, saveDocumentChunks } from "@/lib/rag/vectorStore";
 import { DOCUMENT_TYPES, type DocumentSource } from "@/lib/rag/types";
-import { isDemoAccessAuthorized } from "@/lib/auth/demoAccess";
 import {
   consumeDemoRateLimit,
   DemoRateLimitError,
@@ -57,9 +56,6 @@ async function extractText(file: File, type: DocumentSource["type"]): Promise<st
 }
 
 export async function POST(request: Request): Promise<Response> {
-  if (!isDemoAccessAuthorized(request)) {
-    return Response.json({ error: "Bitte melde dich an, bevor du eine Quelle hinzufügst." }, { status: 401 });
-  }
   const apiKey = getGeminiApiKey();
   if (!apiKey) {
     return Response.json({ error: "Der Gemini-Zugang für diese Demo ist nicht konfiguriert." }, { status: 503 });

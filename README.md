@@ -23,14 +23,14 @@ erfundenen Fakten. Genau darauf liegt der Fokus dieses Klons.
 | NotebookLM-Feature | Im Klon umgesetzt | Begründung |
 |---|---|---|
 | Source-grounded Chat mit Zitaten | ✅ | Kernfunktion, Fokus der 7 Tage |
-| Mehrere Quellen hochladen, verwalten, entfernen | ✅ | Sidebar mit aktiver Quellenliste |
+| Mehrere Quellen hochladen und verwalten | ✅ | Gemeinsame Quellenbibliothek mit aktiver Quellenliste |
 | Text-/Markdown-Extraktion beim Upload | ✅ | Serverseitige Extraktion während der Ingestion |
 | Echtes PDF-Text-Parsing (Binärformat) | ✅ | `pdf-parse` extrahiert lesbaren Text serverseitig |
 | Retrieval über Embeddings/Vector-DB | ✅ | Gemini-Embeddings und Supabase Vector (`pgvector`) mit Similarity Retrieval |
 | Gespeicherte Quellen beim Öffnen wiederherstellen | ✅ | Dokument-Metadaten werden aus vorhandenen Supabase-Chunks geladen; Fragen und neue Uploads benötigen weiterhin Gemini API-Zugriff |
 | YouTube-URL als Quelle | ⚠️ lokal ja, auf Vercel eingeschränkt | Verfügbare YouTube-Untertitel, danach dieselbe RAG-Pipeline – funktioniert zuverlässig lokal, auf Vercel durch YouTubes IP-Blocking gegen Cloud-Provider bekannt unzuverlässig (siehe Abschnitt unten) |
 | Audio Overviews, Video Overviews, Mind Maps, Studio-Panel | ❌ bewusst nicht umgesetzt | Eigenständige Multimedia-Pipelines (TTS/Video-Rendering), außerhalb des Zeitrahmens und nicht Kern der Aufgabe |
-| Quellen einzeln ein-/ausschalten für den Kontext | ❌ (noch offen) | Aktuell fließen immer alle hochgeladenen Quellen in die Suche ein |
+| Quellen aus dem aktuellen Kontext ausblenden | ✅ | Ausgeblendete Quellen werden aus den Chat-Anfragen entfernt; die gemeinsame Bibliothek bleibt erhalten |
 
 ## Tech-Stack
 
@@ -88,28 +88,25 @@ App läuft danach unter [http://localhost:3000](http://localhost:3000).
 
 | Variable | Pflicht | Beschreibung |
 |---|---|---|
-| `GEMINI_API_KEY` | ja | Server-only Gemini-Key des Demo-Betreibers; niemals als `NEXT_PUBLIC_*`-Variable anlegen |
+| `GEMINI_API_KEY` | ja | Server-only Gemini-Key des Betreibers; niemals als `NEXT_PUBLIC_*`-Variable anlegen |
 | `GEMINI_MODEL` | nein | Serverseitige Modellwahl, Standard: `gemini-3.8-flash`; nur die Modell-ID eintragen, ohne `GEMINI_MODEL=` |
 | `SUPABASE_URL` | ja | URL des Supabase-Projekts |
 | `SUPABASE_SERVICE_ROLE_KEY` | ja | Server-only Supabase-Key, niemals im Browser verwenden |
-| `SOURCE_ACCESS_PASSWORD` | ja | Gemeinsames Demo-Passwort (mindestens 32 Zeichen); schützt Quellen und API-Routen, kein separates Nutzerkonto |
 
 Der Betreiber hinterlegt `GEMINI_API_KEY` ausschließlich in den serverseitigen Umgebungsvariablen
 (`.env.local` bzw. Vercel Project Settings). Der Browser erhält diesen Key nie und sendet ihn auch
-nicht an die App. Alle angemeldeten Demo-Besucher verwenden denselben Projekt-Key; API-Nutzung und
-Kosten werden dem Google-Projekt des Betreibers zugerechnet. Die Antwort wird über die Gemini
-Interactions API erzeugt. Anfragen setzen `store=false`, damit
+nicht an die App. Alle Besucher verwenden denselben Projekt-Key; API-Nutzung und Kosten werden dem
+Google-Projekt des Betreibers zugerechnet. Die Antwort wird über die Gemini Interactions API erzeugt.
+Anfragen setzen `store=false`, damit
 Frage und Dokumentkontext nicht als Interaction gespeichert werden. Bei vorübergehender
 Überlastung (`503`) wird die Anfrage einmal wiederholt; wenn das konfigurierte Modell einen
 `404` liefert oder nach dem Retry weiter überlastet ist, wechselt die Anwendung zu
-`gemini-3.7-flash`. Beide Aufrufe verwenden den vom Besucher eingegebenen API-Key. Bei weiteren
-Fehlern gibt die Anwendung, sofern vorhanden, die konkrete Providerdiagnose zurück.
+`gemini-3.7-flash`. Bei weiteren Fehlern gibt die Anwendung, sofern vorhanden, die konkrete
+Providerdiagnose zurück.
 
-Die öffentliche Demo ist durch ein gemeinsames Passwort geschützt. Verwende einen zufälligen Wert
-mit mindestens 32 Zeichen und hinterlege ihn ausschließlich als serverseitige Umgebungsvariable
-(lokal in `.env.local`, bei Vercel in den Project Settings). Nach dem Login werden die in Supabase
-gespeicherten Quellen geladen. Alle Personen mit diesem Demo-Passwort teilen sich denselben
-Quellenbestand; die Anwendung bietet keine individuellen Nutzerkonten.
+Die App ist ohne Login direkt öffentlich erreichbar. Alle Besucher teilen sich absichtlich dieselbe
+Quellenbibliothek in Supabase. Quellen werden beim Öffnen geladen; "Ausblenden" entfernt eine Quelle
+nur aus dem aktuellen Browser-Kontext und löscht sie nicht aus der gemeinsamen Bibliothek.
 
 Das Embedding-Modell (`gemini-embedding-2`) ist bewusst **nicht** über eine Umgebungsvariable
 konfigurierbar, sondern eine feste Konstante in `lib/rag/embeddings.ts` – da die Vektorräume
@@ -150,8 +147,8 @@ kleines Ausgabenlimit gesetzt werden. Ein Google-AI-Pro-Abo (auch Studenten-Vari
 automatisch dasselbe wie Gemini Developer API-Billing. `402`-/`429`-Fehler werden mit einer
 passenden Meldung angezeigt.
 
-Die Anwendung begrenzt zusätzlich pro angemeldeter Demo-Sitzung zehn Chatfragen pro Minute,
-drei Dokument-Uploads und zwei YouTube-Imports pro zehn Minuten. Dieselben Quellen werden beim
+Die Anwendung begrenzt zusätzlich pro Besucher-IP zehn Chatfragen pro Minute, drei Dokument-Uploads
+und zwei YouTube-Imports pro zehn Minuten. Dieselben Quellen werden beim
 erneuten Upload nicht erneut eingebettet. "Ausblenden" entfernt eine Quelle nur aus dem aktuellen
 Kontext; die gemeinsame Demo-Quellenbibliothek bleibt absichtlich erhalten.
 Bereits gespeicherte Quellen können auch ohne ein neues Ingest wieder in der Quellenliste erscheinen.
@@ -160,11 +157,10 @@ Chunks allein ermöglichen daher keine neue Antwort, wenn der API-Zugriff nicht 
 
 Für Vercel müssen dieselben Umgebungsvariablen in den Project Settings unter **Environment
 Variables** hinterlegt werden. `GEMINI_API_KEY` und `SUPABASE_SERVICE_ROLE_KEY` dürfen ausschließlich als
-serverseitige Variable verwendet werden und darf weder in Client-Code noch in eine
+serverseitige Variablen verwendet werden und dürfen weder in Client-Code noch in eine
 `NEXT_PUBLIC_*`-Variable gelangen. Nach dem Setzen der Variablen kann Vercel den Build und
 die dynamischen API-Routen (`/api/documents/ingest`, `/api/documents/ingest-youtube`,
-`/api/documents`, `/api/chat` und `/api/auth`) ausführen. Die Daten- und Ingestion-Routen sind nur
-nach Anmeldung mit `SOURCE_ACCESS_PASSWORD` erreichbar.
+`/api/documents` und `/api/chat`) ausführen.
 
 ### YouTube-Untertitel und Betriebsgrenzen
 

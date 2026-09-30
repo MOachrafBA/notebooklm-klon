@@ -7,7 +7,6 @@ import {
   getGeminiEmbeddingHttpStatus,
 } from "@/lib/rag/embeddings";
 import { findDocumentSourceById, saveDocumentChunks } from "@/lib/rag/vectorStore";
-import { isDemoAccessAuthorized } from "@/lib/auth/demoAccess";
 import {
   consumeDemoRateLimit,
   DemoRateLimitError,
@@ -27,14 +26,6 @@ function isRequestBody(value: unknown): value is { url: string } {
 }
 
 export async function POST(request: Request): Promise<Response> {
-  if (!isDemoAccessAuthorized(request)) {
-    return Response.json({ error: "Bitte melde dich an, bevor du eine Quelle hinzufügst." }, { status: 401 });
-  }
-  const apiKey = getGeminiApiKey();
-  if (!apiKey) {
-    return Response.json({ error: "Der Gemini-Zugang für diese Demo ist nicht konfiguriert." }, { status: 503 });
-  }
-
   let body: unknown;
   try {
     body = await request.json();
@@ -48,6 +39,11 @@ export async function POST(request: Request): Promise<Response> {
   const validation = validateYouTubeUrl(body.url);
   if (!validation.valid) {
     return Response.json({ error: validation.error }, { status: 400 });
+  }
+
+  const apiKey = getGeminiApiKey();
+  if (!apiKey) {
+    return Response.json({ error: "Der Gemini-Zugang für diese Demo ist nicht konfiguriert." }, { status: 503 });
   }
 
   const documentId = `youtube-${validation.videoId}`;

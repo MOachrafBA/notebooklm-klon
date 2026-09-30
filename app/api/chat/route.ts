@@ -3,7 +3,6 @@ import { embedQuestion } from "@/lib/rag/embeddings";
 import { buildPrompt } from "@/lib/rag/prompt";
 import { retrieveDocumentChunks } from "@/lib/rag/vectorStore";
 import type { ChatRequest } from "@/lib/rag/types";
-import { isDemoAccessAuthorized } from "@/lib/auth/demoAccess";
 import { CHAT_RATE_LIMIT, consumeDemoRateLimit, DemoRateLimitError } from "@/lib/auth/demoRateLimit";
 import { getGeminiApiKey } from "@/lib/gemini/requestKey";
 
@@ -28,14 +27,6 @@ function isChatRequest(value: unknown): value is ChatRequest {
 }
 
 export async function POST(request: Request): Promise<Response> {
-  if (!isDemoAccessAuthorized(request)) {
-    return Response.json({ error: "Bitte melde dich an, bevor du Fragen stellst." }, { status: 401 });
-  }
-  const apiKey = getGeminiApiKey();
-  if (!apiKey) {
-    return Response.json({ error: "Der Gemini-Zugang für diese Demo ist nicht konfiguriert." }, { status: 503 });
-  }
-
   let body: unknown;
   try {
     body = await request.json();
@@ -45,6 +36,11 @@ export async function POST(request: Request): Promise<Response> {
 
   if (!isChatRequest(body)) {
     return Response.json({ error: BAD_REQUEST_MESSAGE }, { status: 400 });
+  }
+
+  const apiKey = getGeminiApiKey();
+  if (!apiKey) {
+    return Response.json({ error: "Der Gemini-Zugang für diese Demo ist nicht konfiguriert." }, { status: 503 });
   }
 
   try {

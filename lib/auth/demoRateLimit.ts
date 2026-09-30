@@ -1,5 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
-import { getDemoAccessSessionId } from "./demoAccess";
+import { createHash } from "node:crypto";
 
 export interface DemoRateLimit {
   scope: "chat" | "document-ingestion" | "youtube-ingestion";
@@ -36,10 +36,9 @@ export async function consumeDemoRateLimit(
   request: Request,
   limit: DemoRateLimit,
 ): Promise<boolean> {
-  const sessionId = getDemoAccessSessionId(request);
-  if (!sessionId) {
-    throw new DemoRateLimitError("Die Demo-Sitzung konnte nicht für das Rate-Limit bestimmt werden.");
-  }
+  const forwardedFor = request.headers.get("x-forwarded-for")?.split(",")[0].trim();
+  const clientIp = forwardedFor || request.headers.get("x-real-ip")?.trim() || "anonymous";
+  const clientKey = createHash("sha256").update(clientIp).digest("hex");
 
   const url = process.env.SUPABASE_URL;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -51,7 +50,7 @@ export async function consumeDemoRateLimit(
     auth: { autoRefreshToken: false, persistSession: false },
   }).rpc("consume_demo_rate_limit", {
     p_scope: limit.scope,
-    p_key_hash: sessionId,
+    p_key_hash: clientKey,
     p_max_requests: limit.maxRequests,
     p_window_seconds: limit.windowSeconds,
   });

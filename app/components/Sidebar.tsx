@@ -10,7 +10,6 @@ interface SidebarProps {
   sources: DocumentSource[];
   isSourcesLoading: boolean;
   sourceLoadError: string | null;
-  onLogout: () => Promise<void>;
   onSourceAdded: (
     source: Pick<DocumentSource, "id" | "name" | "type">,
     file: File,
@@ -27,7 +26,6 @@ export function Sidebar({
   sources,
   isSourcesLoading,
   sourceLoadError,
-  onLogout,
   onSourceAdded,
   onYouTubeAdded,
   onSourceHidden,
@@ -87,17 +85,6 @@ export function Sidebar({
         <p className="text-xs font-semibold uppercase tracking-[0.2em] text-indigo-600">Notebook</p>
         <h1 className="mt-2 text-2xl font-semibold tracking-tight text-slate-950">Sourcewise</h1>
         <p className="mt-2 text-sm leading-6 text-slate-500">Deine Dokumente, dein Kontext.</p>
-        <button
-          type="button"
-          onClick={() => {
-            void onLogout().catch((error: unknown) => {
-              setUploadError(error instanceof Error ? error.message : "Die Abmeldung ist fehlgeschlagen.");
-            });
-          }}
-          className="mt-3 text-xs font-medium text-slate-500 underline underline-offset-2 hover:text-slate-900"
-        >
-          Abmelden
-        </button>
       </div>
 
       <button
